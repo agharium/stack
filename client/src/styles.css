@@ -24,10 +24,15 @@ input {
 }
 
 button {
+  cursor: pointer;
   transition:
     transform 160ms ease,
     opacity 160ms ease,
     box-shadow 160ms ease;
+}
+
+button:disabled {
+  cursor: not-allowed;
 }
 
 button:focus-visible,

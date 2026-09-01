@@ -44,7 +44,9 @@ export function GameCard({
         onClick && !disabled
           ? "cursor-pointer hover:-translate-y-3 hover:rotate-1 hover:shadow-2xl active:-translate-y-1"
           : "",
-        disabled ? "cursor-not-allowed opacity-35 grayscale-[35%]" : "",
+        onClick && disabled ? "cursor-not-allowed" : "",
+        !onClick ? "cursor-default disabled:cursor-default" : "",
+        disabled ? "opacity-35 grayscale-[35%]" : "",
       ].join(" ")}
     >
       <span className="absolute left-2 top-1 text-lg font-black">

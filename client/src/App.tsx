@@ -628,7 +628,7 @@ function GameTable(props: GameProps) {
 
       {historyOpen && (
         <div
-          className="fixed inset-0 z-30 grid items-end bg-slate-950/70 lg:items-center"
+          className="fixed inset-0 z-30 grid cursor-pointer items-end bg-slate-950/70 lg:items-center"
           role="presentation"
           onClick={() => setHistoryOpen(false)}
         >
@@ -636,7 +636,7 @@ function GameTable(props: GameProps) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="game-history-title"
-            className="max-h-[80dvh] w-full overflow-hidden rounded-t-[2rem] border border-white/15 bg-[#1a2740] p-5 shadow-2xl lg:mx-auto lg:max-w-lg lg:rounded-[2rem]"
+            className="max-h-[80dvh] w-full cursor-auto overflow-hidden rounded-t-[2rem] border border-white/15 bg-[#1a2740] p-5 shadow-2xl lg:mx-auto lg:max-w-lg lg:rounded-[2rem]"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mb-4 flex items-start justify-between gap-3">
