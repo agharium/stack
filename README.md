@@ -1,6 +1,6 @@
 # STACK!
 
-STACK! is a real-time multiplayer card game inspired by UNO, with custom house rules designed for faster, more chaotic matches. Players create or join rooms by code and play directly in the browser from phones or computers.
+STACK! is a real-time multiplayer card game inspired by UNO, with custom house rules built for faster, more chaotic matches. Create a room, share the code, and play directly in the browser - no accounts required.
 
 No accounts. No database. The server is authoritative: clients send intentions, and the backend decides whether a play is legal.
 
