@@ -1,0 +1,22 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+coverage/
+.vite/
+*.tsbuildinfo
+*.swp
+*.swo
+.idea/
+*.local
+
+# TypeScript project-reference emit from client/tsconfig.node.json
+client/vite.config.d.ts
+client/vite.config.d.ts.map

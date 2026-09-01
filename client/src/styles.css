@@ -1,0 +1,237 @@
+@import "tailwindcss";
+
+:root {
+  font-family:
+    Inter, ui-rounded, "Segoe UI", system-ui, -apple-system, sans-serif;
+  color-scheme: dark;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100dvh;
+  background: #121025;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  transition:
+    transform 160ms ease,
+    opacity 160ms ease,
+    box-shadow 160ms ease;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid #bef264;
+  outline-offset: 3px;
+}
+
+.home-shell {
+  background:
+    radial-gradient(circle at 14% 18%, rgb(236 72 153 / 0.28), transparent 30%),
+    radial-gradient(circle at 87% 80%, rgb(34 211 238 / 0.22), transparent 33%),
+    linear-gradient(135deg, #16122f 0%, #292259 50%, #14112b 100%);
+}
+
+.table-shell {
+  background:
+    radial-gradient(circle at 50% 35%, rgb(40 142 117 / 0.45), transparent 40%),
+    radial-gradient(circle at 50% 40%, #175f58 0%, #123a3e 44%, #11182b 100%);
+}
+
+.brand-title {
+  color: #fff;
+  text-shadow:
+    5px 6px 0 #ec4899,
+    10px 12px 0 rgb(6 182 212 / 0.65);
+}
+
+.field {
+  display: block;
+  width: 100%;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  border-radius: 0.9rem;
+  background: rgb(10 8 30 / 0.45);
+  padding: 0.9rem 1rem;
+  color: white;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.field::placeholder {
+  color: rgb(199 210 254 / 0.55);
+}
+
+.primary-button,
+.secondary-button,
+.danger-button {
+  min-height: 3.3rem;
+  border-radius: 1rem;
+  padding: 0.85rem 1.25rem;
+  font-weight: 900;
+}
+
+.primary-button {
+  background: #bef264;
+  color: #1a2e05;
+  box-shadow: 0 8px 0 #65a30d;
+}
+
+.primary-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 0 #65a30d;
+}
+
+.secondary-button {
+  border: 1px solid rgb(255 255 255 / 0.2);
+  background: rgb(255 255 255 / 0.12);
+  color: white;
+}
+
+.secondary-button:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.2);
+}
+
+.danger-button {
+  background: #fb7185;
+  color: #4c0519;
+  box-shadow: 0 7px 0 #be123c;
+}
+
+.primary-button:disabled,
+.secondary-button:disabled,
+.danger-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  box-shadow: none;
+}
+
+.game-card {
+  transition:
+    transform 160ms ease,
+    opacity 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.card-red,
+.bg-red {
+  background: linear-gradient(145deg, #fb7185, #be123c);
+}
+
+.card-yellow,
+.bg-yellow {
+  background: linear-gradient(145deg, #fde047, #ca8a04);
+}
+
+.card-green,
+.bg-green {
+  background: linear-gradient(145deg, #4ade80, #15803d);
+}
+
+.card-blue,
+.bg-blue {
+  background: linear-gradient(145deg, #60a5fa, #1d4ed8);
+}
+
+.wild-card {
+  background:
+    conic-gradient(
+      from 45deg,
+      #e11d48 0deg 90deg,
+      #eab308 90deg 180deg,
+      #16a34a 180deg 270deg,
+      #2563eb 270deg 360deg
+    );
+}
+
+.card-back {
+  background:
+    repeating-linear-gradient(45deg, transparent 0 8px, rgb(255 255 255 / 0.08) 8px 10px),
+    linear-gradient(145deg, #7c3aed, #db2777);
+}
+
+.color-dot {
+  display: inline-block;
+  width: 1.15rem;
+  height: 1.15rem;
+  border: 3px solid white;
+  border-radius: 999px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+}
+
+.penalty-badge {
+  border-radius: 999px;
+  background: #fb7185;
+  padding: 0.35rem 0.8rem;
+  color: #4c0519;
+  font-size: 1.25rem;
+  font-weight: 1000;
+  box-shadow: 0 4px 0 #be123c;
+}
+
+.uno-button {
+  border-radius: 999px;
+  background: #facc15;
+  padding: 0.55rem 1.2rem;
+  color: #422006;
+  font-size: 1.1rem;
+  font-weight: 1000;
+  box-shadow: 0 5px 0 #ca8a04;
+  animation: uno-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.color-choice {
+  min-height: 5rem;
+  border: 4px solid white;
+  border-radius: 1rem;
+  color: white;
+  font-size: 1.15rem;
+  font-weight: 1000;
+  text-transform: uppercase;
+  box-shadow: 0 6px 0 rgb(0 0 0 / 0.25);
+}
+
+.color-choice:hover {
+  transform: translateY(-3px);
+}
+
+.winner-card {
+  background:
+    radial-gradient(circle at 50% 0%, rgb(250 204 21 / 0.3), transparent 35%),
+    linear-gradient(145deg, #312e81, #581c87);
+}
+
+@keyframes uno-pulse {
+  to {
+    transform: scale(1.07) rotate(1deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .brand-title {
+    text-shadow:
+      3px 4px 0 #ec4899,
+      6px 8px 0 rgb(6 182 212 / 0.65);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
