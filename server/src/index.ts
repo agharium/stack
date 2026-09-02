@@ -10,6 +10,7 @@ import type {
   ServerToClientEvents,
 } from "../../shared/types.js";
 import { createSessionMiddleware } from "./lib/session.js";
+import { configureTrustProxy } from "./lib/trust-proxy.js";
 import { createApiRouter } from "./routes/api.js";
 import { RoomManager } from "./rooms/room-manager.js";
 import { registerSocketHandlers } from "./socket/handlers.js";
@@ -17,6 +18,7 @@ import { authService } from "./services/auth-service.js";
 
 const isProduction = process.env.NODE_ENV === "production";
 const app = express();
+configureTrustProxy(app);
 const httpServer = createServer(app);
 const sessionMiddleware = createSessionMiddleware(isProduction);
 

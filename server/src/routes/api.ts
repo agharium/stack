@@ -3,17 +3,28 @@ import * as authController from "../controllers/auth-controller.js";
 import * as profileController from "../controllers/profile-controller.js";
 import * as rankingController from "../controllers/ranking-controller.js";
 import { optionalAuth, requireAuth } from "../middleware/auth.js";
+import {
+  authRateLimiters,
+  type AuthRateLimiters,
+} from "../middleware/rate-limit.js";
 
-export function createApiRouter(): Router {
+export function createApiRouter(
+  rateLimiters: AuthRateLimiters = authRateLimiters,
+): Router {
   const router = Router();
 
   router.use(optionalAuth);
 
-  router.post("/auth/register", (request, response) =>
-    void authController.register(request, response),
+  router.post(
+    "/auth/register",
+    rateLimiters.registerShort,
+    rateLimiters.registerDaily,
+    (request, response) => void authController.register(request, response),
   );
-  router.post("/auth/login", (request, response) =>
-    void authController.login(request, response),
+  router.post(
+    "/auth/login",
+    rateLimiters.loginFailed,
+    (request, response) => void authController.login(request, response),
   );
   router.post("/auth/logout", (request, response) =>
     authController.logout(request, response),
