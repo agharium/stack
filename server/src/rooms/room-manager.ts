@@ -1,11 +1,18 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { Game } from "../game/game.js";
 import { ERRORS } from "../messages.js";
+import { validateGuestNickname } from "../lib/validation.js";
 
 const ROOM_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
+export type AuthIdentity = {
+  userId: string;
+  name: string;
+};
+
 export type RoomPlayer = {
   id: string;
+  userId: string | null;
   nickname: string;
   socketId: string;
   connected: boolean;
@@ -16,24 +23,27 @@ export type Room = {
   hostId: string;
   players: RoomPlayer[];
   game: Game;
+  matchPersisted: boolean;
 };
 
-function cleanNickname(value: string): string {
-  const nickname = value.trim().replace(/\s+/g, " ");
-  if (nickname.length < 2 || nickname.length > 20) {
-    throw new Error(ERRORS.nicknameLength);
-  }
-  return nickname;
+function resolveDisplayName(
+  auth: AuthIdentity | null,
+  nicknameValue?: string,
+): string {
+  if (auth) return auth.name;
+  if (!nicknameValue) throw new Error(ERRORS.nicknameRequired);
+  return validateGuestNickname(nicknameValue);
 }
 
 export class RoomManager {
   readonly rooms = new Map<string, Room>();
 
-  createRoom(nicknameValue: string, socketId: string): {
-    room: Room;
-    player: RoomPlayer;
-  } {
-    const nickname = cleanNickname(nicknameValue);
+  createRoom(
+    socketId: string,
+    auth: AuthIdentity | null,
+    nicknameValue?: string,
+  ): { room: Room; player: RoomPlayer } {
+    const nickname = resolveDisplayName(auth, nicknameValue);
     let code = "";
     do {
       code = Array.from(
@@ -44,40 +54,89 @@ export class RoomManager {
 
     const player: RoomPlayer = {
       id: randomUUID(),
+      userId: auth?.userId ?? null,
       nickname,
       socketId,
       connected: true,
     };
     const game = new Game([player]);
-    const room = { code, hostId: player.id, players: [player], game };
+    const room: Room = {
+      code,
+      hostId: player.id,
+      players: [player],
+      game,
+      matchPersisted: false,
+    };
     this.rooms.set(code, room);
     return { room, player };
   }
 
   joinRoom(
     codeValue: string,
-    nicknameValue: string,
     socketId: string,
+    auth: AuthIdentity | null,
+    nicknameValue?: string,
     requestedPlayerId?: string,
   ): { room: Room; player: RoomPlayer; reconnected: boolean } {
     const code = codeValue.trim().toUpperCase();
     if (!/^[A-Z2-9]{4}$/.test(code)) throw new Error(ERRORS.invalidRoomCode);
     const room = this.rooms.get(code);
     if (!room) throw new Error(ERRORS.roomNotFound);
-    const nickname = cleanNickname(nicknameValue);
+    const nickname = resolveDisplayName(auth, nicknameValue);
+
+    if (auth?.userId) {
+      const connectedSameUser = room.players.find(
+        (player) => player.userId === auth.userId && player.connected,
+      );
+      if (connectedSameUser) {
+        throw new Error(ERRORS.alreadyInRoom);
+      }
+    }
 
     if (requestedPlayerId) {
-      const existing = room.players.find(
-        (player) =>
-          player.id === requestedPlayerId &&
-          !player.connected &&
-          player.nickname.toLocaleLowerCase() === nickname.toLocaleLowerCase(),
-      );
+      const existing = room.players.find((player) => {
+        if (player.id !== requestedPlayerId || player.connected) return false;
+        if (auth?.userId) return player.userId === auth.userId;
+        return (
+          player.nickname.toLocaleLowerCase() === nickname.toLocaleLowerCase()
+        );
+      });
       if (existing) {
         existing.socketId = socketId;
         existing.connected = true;
+        if (auth) {
+          existing.userId = auth.userId;
+          existing.nickname = auth.name;
+          const gamePlayer = room.game.players.find(
+            (candidate) => candidate.id === existing.id,
+          );
+          if (gamePlayer) {
+            gamePlayer.userId = auth.userId;
+            gamePlayer.nickname = auth.name;
+          }
+        }
         room.game.setConnected(existing.id, true);
         return { room, player: existing, reconnected: true };
+      }
+    }
+
+    if (auth?.userId) {
+      const disconnectedSameUser = room.players.find(
+        (player) => player.userId === auth.userId && !player.connected,
+      );
+      if (disconnectedSameUser) {
+        disconnectedSameUser.socketId = socketId;
+        disconnectedSameUser.connected = true;
+        disconnectedSameUser.nickname = auth.name;
+        const gamePlayer = room.game.players.find(
+          (candidate) => candidate.id === disconnectedSameUser.id,
+        );
+        if (gamePlayer) {
+          gamePlayer.userId = auth.userId;
+          gamePlayer.nickname = auth.name;
+        }
+        room.game.setConnected(disconnectedSameUser.id, true);
+        return { room, player: disconnectedSameUser, reconnected: true };
       }
     }
 
@@ -86,6 +145,7 @@ export class RoomManager {
     }
     if (room.players.length >= 12) throw new Error(ERRORS.roomFull);
     if (
+      !auth &&
       room.players.some(
         (player) =>
           player.nickname.toLocaleLowerCase() === nickname.toLocaleLowerCase(),
@@ -96,6 +156,7 @@ export class RoomManager {
 
     const player: RoomPlayer = {
       id: randomUUID(),
+      userId: auth?.userId ?? null,
       nickname,
       socketId,
       connected: true,
@@ -103,6 +164,7 @@ export class RoomManager {
     room.players.push(player);
     room.game.players.push({
       id: player.id,
+      userId: player.userId,
       nickname,
       connected: true,
       hand: [],
@@ -145,7 +207,11 @@ export class RoomManager {
         this.rooms.delete(room.code);
         return null;
       }
-      if (!room.players.some((candidate) => candidate.id === room.hostId && candidate.connected)) {
+      if (
+        !room.players.some(
+          (candidate) => candidate.id === room.hostId && candidate.connected,
+        )
+      ) {
         room.hostId = connected[0]!.id;
       }
       return room;

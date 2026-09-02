@@ -105,6 +105,7 @@ describe("resultado final imutável", () => {
     expect(game.result?.standings).toHaveLength(4);
     expect(game.result?.standings[0]).toEqual({
       playerId: "P1",
+      userId: null,
       nickname: "P1",
       cardsRemaining: 0,
       position: 1,

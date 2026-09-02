@@ -23,15 +23,22 @@ import { CardStack } from "./components/CardStack";
 import { GameCard } from "./components/GameCard";
 import { GameEventList } from "./components/GameEventLog";
 import { FinalResults } from "./components/FinalResults";
+import { LoginPage } from "./components/LoginPage";
 import { PlayerBoard } from "./components/PlayerBoard";
+import { ProfilePage } from "./components/ProfilePage";
+import { RankingPage } from "./components/RankingPage";
+import { RegisterPage } from "./components/RegisterPage";
+import { api, type PrivateAccount } from "./api";
 
 const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io({
   autoConnect: true,
+  withCredentials: true,
 });
 const COLORS: CardColor[] = ["red", "yellow", "green", "blue"];
 const SESSION_KEY = "stack-session";
 
 type Session = { nickname: string; roomCode: string; playerId: string };
+type HomeScreen = "home" | "login" | "register" | "profile" | "ranking";
 
 function readSession(): Session | null {
   try {
@@ -80,10 +87,28 @@ export default function App() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [connected, setConnected] = useState(socket.connected);
+  const [authUser, setAuthUser] = useState<PrivateAccount | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [homeScreen, setHomeScreen] = useState<HomeScreen>("home");
   const [wildPlay, setWildPlay] = useState<{
     cards: Card[];
     drawn: boolean;
   } | null>(null);
+
+  useEffect(() => {
+    void api
+      .me()
+      .then((result) => {
+        if (result.authenticated) {
+          setAuthUser(result.user);
+          setNickname(result.user.name);
+        }
+      })
+      .catch(() => {
+        // Guest mode remains available when auth check fails.
+      })
+      .finally(() => setAuthChecked(true));
+  }, []);
 
   useEffect(() => {
     const onConnect = () => {
@@ -93,7 +118,7 @@ export default function App() {
       socket.emit(
         "join-room",
         {
-          nickname: saved.nickname,
+          nickname: authUser?.name ?? saved.nickname,
           roomCode: saved.roomCode,
           playerId: saved.playerId,
         },
@@ -129,28 +154,61 @@ export default function App() {
     setSession(next);
   };
 
+  const displayName = authUser?.name ?? nickname.trim();
+
   const createRoom = (event: FormEvent) => {
     event.preventDefault();
+    if (!authUser && displayName.length < 2) {
+      setError("Informe seu nome para jogar como convidado.");
+      return;
+    }
     setBusy(true);
-    socket.emit("create-room", { nickname }, (result) => {
-      setBusy(false);
-      if (!result.ok) return setError(result.error);
-      const next = { nickname: nickname.trim(), ...result.data };
-      saveSession(next);
-      setError("");
-    });
+    socket.emit(
+      "create-room",
+      authUser ? {} : { nickname: displayName },
+      (result) => {
+        setBusy(false);
+        if (!result.ok) return setError(result.error);
+        const next = {
+          nickname: displayName,
+          ...result.data,
+        };
+        saveSession(next);
+        setError("");
+      },
+    );
   };
 
   const joinRoom = (event: FormEvent) => {
     event.preventDefault();
+    if (!authUser && displayName.length < 2) {
+      setError("Informe seu nome para jogar como convidado.");
+      return;
+    }
     setBusy(true);
     const code = roomCode.trim().toUpperCase();
-    socket.emit("join-room", { nickname, roomCode: code }, (result) => {
-      setBusy(false);
-      if (!result.ok) return setError(result.error);
-      saveSession({ nickname: nickname.trim(), ...result.data });
-      setError("");
-    });
+    socket.emit(
+      "join-room",
+      authUser
+        ? { roomCode: code }
+        : { nickname: displayName, roomCode: code },
+      (result) => {
+        setBusy(false);
+        if (!result.ok) return setError(result.error);
+        saveSession({ nickname: displayName, ...result.data });
+        setError("");
+      },
+    );
+  };
+
+  const logout = async () => {
+    try {
+      await api.logout();
+    } catch {
+      // Local logout still proceeds.
+    }
+    setAuthUser(null);
+    leave();
   };
 
   const action = (
@@ -221,6 +279,45 @@ export default function App() {
   };
 
   if (!state) {
+    if (homeScreen === "login") {
+      return (
+        <LoginPage
+          onBack={() => setHomeScreen("home")}
+          onGoRegister={() => setHomeScreen("register")}
+          onSuccess={(user) => {
+            setAuthUser(user);
+            setNickname(user.name);
+            setHomeScreen("home");
+          }}
+        />
+      );
+    }
+    if (homeScreen === "register") {
+      return (
+        <RegisterPage
+          onBack={() => setHomeScreen("home")}
+          onGoLogin={() => setHomeScreen("login")}
+          onSuccess={(user) => {
+            setAuthUser(user);
+            setNickname(user.name);
+            setHomeScreen("home");
+          }}
+        />
+      );
+    }
+    if (homeScreen === "profile" && authUser) {
+      return (
+        <ProfilePage
+          user={authUser}
+          onBack={() => setHomeScreen("home")}
+          onUpdated={setAuthUser}
+        />
+      );
+    }
+    if (homeScreen === "ranking") {
+      return <RankingPage onBack={() => setHomeScreen("home")} />;
+    }
+
     return (
       <main className="home-shell min-h-dvh px-4 py-8 text-white">
         <div className="mx-auto flex min-h-[calc(100dvh-4rem)] max-w-5xl items-center">
@@ -233,27 +330,35 @@ export default function App() {
               <h1 className="brand-title text-7xl font-black tracking-tighter sm:text-9xl">
                 STACK!
               </h1>
-              <p className="mt-4 max-w-xl text-xl font-semibold text-indigo-100 sm:text-2xl">
-                Crie uma sala ou entre na sala da sua turma. Combine cores,
-                redirecione correntes e seja o primeiro a ficar sem cartas.
-              </p>
+              {authUser ? (
+                <p className="mt-4 text-xl font-semibold text-indigo-100 sm:text-2xl">
+                  Olá, {authUser.name}!
+                </p>
+              ) : (
+                <p className="mt-4 max-w-xl text-xl font-semibold text-indigo-100 sm:text-2xl">
+                  Crie uma sala ou entre na sala da sua turma. Combine cores,
+                  redirecione correntes e seja o primeiro a ficar sem cartas.
+                </p>
+              )}
               <div className="mt-8 flex gap-3 text-sm font-bold text-indigo-200">
-                <span>2–12 jogadores</span><span>•</span><span>Sem cadastro</span><span>•</span><span>Funciona no celular</span>
+                <span>2–12 jogadores</span><span>•</span><span>Conta opcional</span><span>•</span><span>Funciona no celular</span>
               </div>
             </section>
             <section className="rounded-[2rem] border border-white/15 bg-white/10 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
-              <label className="block text-sm font-black uppercase tracking-widest text-indigo-200">
-                Seu nome
-                <input
-                  value={nickname}
-                  onChange={(event) => setNickname(event.target.value)}
-                  maxLength={20}
-                  placeholder="Ex.: Professora Ana"
-                  className="field mt-2"
-                />
-              </label>
-              <form onSubmit={createRoom} className="mt-6">
-                <button className="primary-button w-full" disabled={busy || !connected}>
+              {!authUser && (
+                <label className="block text-sm font-black uppercase tracking-widest text-indigo-200">
+                  Seu nome
+                  <input
+                    value={nickname}
+                    onChange={(event) => setNickname(event.target.value)}
+                    maxLength={50}
+                    placeholder="Ex.: João"
+                    className="field mt-2"
+                  />
+                </label>
+              )}
+              <form onSubmit={createRoom} className={authUser ? "mt-0" : "mt-6"}>
+                <button className="primary-button w-full" disabled={busy || !connected || !authChecked}>
                   Criar sala
                 </button>
               </form>
@@ -270,10 +375,63 @@ export default function App() {
                   aria-label="Código da sala"
                   className="field min-w-0 flex-1 uppercase tracking-[.25em]"
                 />
-                <button className="secondary-button" disabled={busy || !connected}>
-                  Entrar na sala
+                <button className="secondary-button" disabled={busy || !connected || !authChecked}>
+                  Entrar
                 </button>
               </form>
+
+              {!authUser && (
+                <p className="mt-6 text-center text-sm font-semibold text-indigo-200">
+                  Entre para salvar seus resultados no ranking.
+                </p>
+              )}
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {!authUser && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setHomeScreen("login")}
+                      className="secondary-button w-full"
+                    >
+                      Entrar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHomeScreen("register")}
+                      className="secondary-button w-full"
+                    >
+                      Criar conta
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setHomeScreen("ranking")}
+                  className={`secondary-button w-full ${authUser ? "sm:col-span-2" : ""}`}
+                >
+                  🏆 Ranking geral
+                </button>
+                {authUser && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setHomeScreen("profile")}
+                      className="secondary-button w-full"
+                    >
+                      Perfil
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void logout()}
+                      className="secondary-button w-full"
+                    >
+                      Sair
+                    </button>
+                  </>
+                )}
+              </div>
+
               {!connected && <p className="mt-4 text-sm font-bold text-amber-300">Conectando ao servidor da partida…</p>}
               {error && <ErrorBanner message={error} />}
             </section>
@@ -293,6 +451,7 @@ export default function App() {
       error={error}
       busy={busy}
       connected={connected}
+      isGuest={!authUser}
       wildPlay={wildPlay}
       closeWild={() => setWildPlay(null)}
       chooseWild={(color) =>
@@ -375,6 +534,7 @@ function Lobby({ state, error, busy, start, leave }: {
 
 type GameProps = {
   state: PlayerView; error: string; busy: boolean; connected: boolean;
+  isGuest: boolean;
   wildPlay: { cards: Card[]; drawn: boolean } | null;
   closeWild: () => void; chooseWild: (color: CardColor) => void;
   play: (cards: Card[], drawn?: boolean) => void; draw: () => void;
@@ -803,6 +963,7 @@ function GameTable(props: GameProps) {
         <FinalResults
           result={state.result}
           isHost={state.hostId === state.selfId}
+          isGuest={props.isGuest}
           busy={props.busy}
           onRestart={props.restart}
         />

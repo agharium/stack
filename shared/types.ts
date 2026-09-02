@@ -40,6 +40,14 @@ export type PublicPlayer = {
 
 export type FinalStanding = {
   playerId: string;
+  userId: string | null;
+  nickname: string;
+  cardsRemaining: number;
+  position: number;
+};
+
+export type PublicFinalStanding = {
+  playerId: string;
   nickname: string;
   cardsRemaining: number;
   position: number;
@@ -48,6 +56,11 @@ export type FinalStanding = {
 export type GameResult = {
   winnerId: string;
   standings: FinalStanding[];
+};
+
+export type PublicGameResult = {
+  winnerId: string;
+  standings: PublicFinalStanding[];
 };
 
 export type GameEvent = {
@@ -71,7 +84,7 @@ export type PlayerView = {
   drawChain: DrawChain | null;
   pendingDrawPlay: PendingDrawPlayView | null;
   winnerId: string | null;
-  result: GameResult | null;
+  result: PublicGameResult | null;
   events: GameEvent[];
   currentSpyPlayerId: string | null;
   spyRemainingTurns: number | null;
@@ -81,9 +94,9 @@ export type Ack<T = undefined> =
   | ({ ok: true } & (T extends undefined ? object : { data: T }))
   | { ok: false; error: string };
 
-export type CreateRoomPayload = { nickname: string; playerId?: string };
+export type CreateRoomPayload = { nickname?: string; playerId?: string };
 export type JoinRoomPayload = {
-  nickname: string;
+  nickname?: string;
   roomCode: string;
   playerId?: string;
 };

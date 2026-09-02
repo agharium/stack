@@ -1,8 +1,9 @@
-import type { GameResult } from "../../../shared/types";
+import type { PublicGameResult } from "../../../shared/types";
 
 type Props = {
-  result: GameResult;
+  result: PublicGameResult;
   isHost: boolean;
+  isGuest: boolean;
   busy: boolean;
   onRestart: () => void;
 };
@@ -17,6 +18,7 @@ const placementIcon = (position: number): string | null => {
 export function FinalResults({
   result,
   isHost,
+  isGuest,
   busy,
   onRestart,
 }: Props) {
@@ -79,6 +81,12 @@ export function FinalResults({
               })}
             </ol>
           </div>
+
+          {isGuest && (
+            <p className="mt-5 text-sm font-semibold text-indigo-200">
+              Crie uma conta para participar do ranking nas próximas partidas.
+            </p>
+          )}
 
           {isHost ? (
             <button

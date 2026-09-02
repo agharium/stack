@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  username     String        @unique
+  passwordHash String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  matchResults MatchResult[]
+  wonMatches   Match[]       @relation("MatchWinner")
+}
+
+model Match {
+  id                 String        @id @default(cuid())
+  sessionId          String        @unique
+  roomCode           String
+  startedAt          DateTime
+  finishedAt         DateTime
+  winnerUserId       String?
+  winnerNameSnapshot String
+  createdAt          DateTime      @default(now())
+  winnerUser         User?         @relation("MatchWinner", fields: [winnerUserId], references: [id], onDelete: SetNull)
+  results            MatchResult[]
+}
+
+model MatchResult {
+  id                  String   @id @default(cuid())
+  matchId             String
+  userId              String?
+  displayNameSnapshot String
+  position            Int
+  cardsRemaining      Int
+  pointsAwarded       Int
+  createdAt           DateTime @default(now())
+  match               Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user                User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([matchId])
+}

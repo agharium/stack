@@ -13,6 +13,7 @@ import {
   COLOR_LABELS_PT_BR,
 } from "../../../shared/cards.js";
 import { ERRORS, chainColorMismatch } from "../messages.js";
+import { randomUUID } from "node:crypto";
 import { createDeck, shuffle } from "./deck.js";
 import {
   buildSpyQueue,
@@ -24,6 +25,7 @@ import {
 export type GamePhase = "lobby" | "playing" | "finished";
 export type GamePlayer = {
   id: string;
+  userId: string | null;
   nickname: string;
   connected: boolean;
   hand: Card[];
@@ -72,17 +74,26 @@ export class Game {
   pendingDrawPlay: PendingDrawPlay | null = null;
   winnerId: string | null = null;
   result: GameResult | null = null;
+  matchSessionId: string | null = null;
+  startedAt: Date | null = null;
   events: GameEvent[] = [];
   lastPlayerId: string | null = null;
   spy: SpyState = createEmptySpyState();
   private servedAsSpyThisCycle = new Set<string>();
 
   constructor(
-    players: Array<{ id: string; nickname: string; connected?: boolean }>,
+    players: Array<{
+      id: string;
+      nickname: string;
+      userId?: string | null;
+      connected?: boolean;
+    }>,
     private readonly random: () => number = Math.random,
   ) {
     this.players = players.map((player) => ({
-      ...player,
+      id: player.id,
+      userId: player.userId ?? null,
+      nickname: player.nickname,
       connected: player.connected ?? true,
       hand: [],
       unoDeclared: false,
@@ -99,6 +110,8 @@ export class Game {
       throw new Error(ERRORS.minimumPlayers);
     }
     this.phase = "playing";
+    this.matchSessionId = randomUUID();
+    this.startedAt = new Date();
     this.direction = 1;
     this.drawChain = null;
     this.pendingDrawPlay = null;
@@ -634,6 +647,7 @@ export class Game {
       previousPosition = position;
       return {
         playerId: player.id,
+        userId: player.userId,
         nickname: player.nickname,
         cardsRemaining: player.hand.length,
         position,
@@ -733,7 +747,10 @@ export class Game {
         ? {
             winnerId: this.result.winnerId,
             standings: this.result.standings.map((standing) => ({
-              ...standing,
+              playerId: standing.playerId,
+              nickname: standing.nickname,
+              cardsRemaining: standing.cardsRemaining,
+              position: standing.position,
             })),
           }
         : null,

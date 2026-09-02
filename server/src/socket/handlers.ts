@@ -1,3 +1,4 @@
+import type { Request } from "express";
 import type { Server, Socket } from "socket.io";
 import type {
   Ack,
@@ -5,8 +6,9 @@ import type {
   PlayerView,
   ServerToClientEvents,
 } from "../../../shared/types.js";
-import { RoomManager, type Room } from "../rooms/room-manager.js";
+import { RoomManager, type AuthIdentity, type Room } from "../rooms/room-manager.js";
 import { ERRORS } from "../messages.js";
+import { matchService } from "../services/match-service.js";
 
 type GameServer = Server<ClientToServerEvents, ServerToClientEvents>;
 type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -17,6 +19,14 @@ const failure = <T = undefined>(error: unknown): Ack<T> =>
     ok: false,
     error: error instanceof Error ? error.message : ERRORS.unexpected,
   }) as Ack<T>;
+
+function readAuthFromSocket(socket: GameSocket): AuthIdentity | null {
+  const session = (socket.request as Request).session;
+  const userId = session?.userId;
+  const name = session?.userName;
+  if (!userId || !name) return null;
+  return { userId, name };
+}
 
 export function registerSocketHandlers(
   io: GameServer,
@@ -35,6 +45,36 @@ export function registerSocketHandlers(
     }
   };
 
+  const maybePersistMatch = (room: Room): void => {
+    if (
+      room.matchPersisted ||
+      room.game.phase !== "finished" ||
+      !room.game.result ||
+      !room.game.matchSessionId ||
+      !room.game.startedAt
+    ) {
+      return;
+    }
+    room.matchPersisted = true;
+    void matchService
+      .saveCompletedMatch({
+        sessionId: room.game.matchSessionId,
+        roomCode: room.code,
+        startedAt: room.game.startedAt,
+        finishedAt: new Date(),
+        result: room.game.result,
+        playerIdentities: room.players.map((player) => ({
+          playerId: player.id,
+          userId: player.userId,
+          name: player.nickname,
+        })),
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to persist completed match:", error);
+        room.matchPersisted = false;
+      });
+  };
+
   const authorize = (
     socket: GameSocket,
     roomCode: string,
@@ -50,9 +90,11 @@ export function registerSocketHandlers(
   io.on("connection", (socket) => {
     socket.on("create-room", (payload, ack) => {
       try {
+        const auth = readAuthFromSocket(socket);
         const { room, player } = manager.createRoom(
-          payload.nickname,
           socket.id,
+          auth,
+          payload.nickname,
         );
         void socket.join(room.code);
         emitState(room);
@@ -67,14 +109,17 @@ export function registerSocketHandlers(
 
     socket.on("join-room", (payload, ack) => {
       try {
+        const auth = readAuthFromSocket(socket);
         const { room, player } = manager.joinRoom(
           payload.roomCode,
-          payload.nickname,
           socket.id,
+          auth,
+          payload.nickname,
           payload.playerId,
         );
         void socket.join(room.code);
         emitState(room);
+        maybePersistMatch(room);
         ack({
           ok: true,
           data: { roomCode: room.code, playerId: player.id },
@@ -84,14 +129,20 @@ export function registerSocketHandlers(
       }
     });
 
+    const afterGameAction = (room: Room): void => {
+      emitState(room);
+      maybePersistMatch(room);
+    };
+
     socket.on("start-game", (payload, ack) => {
       try {
         const room = authorize(socket, payload.roomCode, payload.playerId);
         if (room.hostId !== payload.playerId) {
           throw new Error(ERRORS.hostStartOnly);
         }
+        room.matchPersisted = false;
         room.game.start();
-        emitState(room);
+        afterGameAction(room);
         ack(success());
       } catch (error) {
         ack(failure(error));
@@ -106,7 +157,7 @@ export function registerSocketHandlers(
           payload.cardIds,
           payload.chosenColor,
         );
-        emitState(room);
+        afterGameAction(room);
         ack(success());
       } catch (error) {
         ack(failure(error));
@@ -117,7 +168,7 @@ export function registerSocketHandlers(
       try {
         const room = authorize(socket, payload.roomCode, payload.playerId);
         room.game.drawOneCard(payload.playerId);
-        emitState(room);
+        afterGameAction(room);
         ack(success());
       } catch (error) {
         ack(failure(error));
@@ -132,7 +183,7 @@ export function registerSocketHandlers(
           payload.cardIds,
           payload.chosenColor,
         );
-        emitState(room);
+        afterGameAction(room);
         ack(success());
       } catch (error) {
         ack(failure(error));
@@ -143,7 +194,7 @@ export function registerSocketHandlers(
       try {
         const room = authorize(socket, payload.roomCode, payload.playerId);
         room.game.keepDrawnCard(payload.playerId);
-        emitState(room);
+        afterGameAction(room);
         ack(success());
       } catch (error) {
         ack(failure(error));
@@ -154,7 +205,7 @@ export function registerSocketHandlers(
       try {
         const room = authorize(socket, payload.roomCode, payload.playerId);
         room.game.acceptDrawPenalty(payload.playerId);
-        emitState(room);
+        afterGameAction(room);
         ack(success());
       } catch (error) {
         ack(failure(error));
@@ -165,7 +216,7 @@ export function registerSocketHandlers(
       try {
         const room = authorize(socket, payload.roomCode, payload.playerId);
         room.game.declareUno(payload.playerId);
-        emitState(room);
+        afterGameAction(room);
         ack(success());
       } catch (error) {
         ack(failure(error));
@@ -176,7 +227,7 @@ export function registerSocketHandlers(
       try {
         const room = authorize(socket, payload.roomCode, payload.playerId);
         room.game.accuseUno(payload.playerId, payload.targetPlayerId);
-        emitState(room);
+        afterGameAction(room);
         ack(success());
       } catch (error) {
         ack(failure(error));
@@ -192,8 +243,9 @@ export function registerSocketHandlers(
         if (room.game.phase !== "finished") {
           throw new Error(ERRORS.gameNotOver);
         }
+        room.matchPersisted = false;
         room.game.restart();
-        emitState(room);
+        afterGameAction(room);
         ack(success());
       } catch (error) {
         ack(failure(error));
