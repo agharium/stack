@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Card, CardColor } from "../../../shared/types.js";
 import { Game } from "../game/game.js";
 import { ERRORS } from "../messages.js";
+import { bootstrapSpy } from "./test-helpers.js";
 
 let serial = 40_000;
 const number = (color: CardColor, value: number): Card => ({
@@ -22,6 +23,8 @@ function setup(): Game {
     () => 0.4,
   );
   game.phase = "playing";
+  game.matchPlayerOrder = ["P1", "P2", "P3"];
+  bootstrapSpy(game, ["P1", "P2", "P3"]);
   game.discardPile = [number("green", 9)];
   game.activeColor = "green";
   game.drawPile = Array.from({ length: 40 }, (_, value) =>
@@ -143,7 +146,7 @@ describe("jogada agrupada após comprar", () => {
 });
 
 describe("declaração e acusação de UNO", () => {
-  it("expõe contagens públicas sem expor cartas adversárias", () => {
+  it("expõe contagens ao espião sem expor cartas adversárias", () => {
     const game = setup();
     give(game, "P1", number("red", 1));
     give(game, "P2", number("blue", 2), number("yellow", 3));
@@ -156,6 +159,14 @@ describe("declaração e acusação de UNO", () => {
         .players.find((player) => player.id === "P2")?.cardCount,
     ).toBe(2);
     expect(serialized).not.toContain(game.getPlayer("P2").hand[0]!.id);
+
+    const outsider = game.toPlayerView("ABCD", "P1", "P2");
+    expect(
+      outsider.players.find((player) => player.id === "P1")?.cardCount,
+    ).toBeNull();
+    expect(
+      outsider.players.find((player) => player.id === "P2")?.cardCount,
+    ).toBe(2);
   });
 
   it("exige nova declaração ao chegar a exatamente uma carta", () => {
@@ -178,32 +189,36 @@ describe("declaração e acusação de UNO", () => {
   it("não permite declarar UNO com duas cartas", () => {
     const game = setup();
     give(game, "P1", number("red", 2), number("blue", 3));
-    expect(() => game.declareUno("P1")).toThrow(ERRORS.noUnoNeeded);
+    expect(() => game.declareUno("P1")).toThrow(ERRORS.noLongerAtUnoCount);
   });
 
   it("aplica duas cartas ao alvo em uma acusação correta", () => {
     const game = setup();
-    give(game, "P2", number("red", 2));
-    expect(game.accuseUno("P1", "P2")).toBe(true);
+    give(game, "P2", number("red", 1));
+    game.accuseUno("P1", "P2");
     expect(game.getPlayer("P2").hand).toHaveLength(3);
     expect(game.getPlayer("P2").unoDeclared).toBe(false);
   });
 
-  it("pune o acusador quando o alvo tem mais de uma carta", () => {
+  it("rejeita acusação quando o alvo tem mais de uma carta", () => {
     const game = setup();
     give(game, "P1", number("red", 1));
     give(game, "P2", number("red", 2), number("blue", 3));
-    expect(game.accuseUno("P1", "P2")).toBe(false);
-    expect(game.getPlayer("P1").hand).toHaveLength(3);
+    expect(() => game.accuseUno("P1", "P2")).toThrow(
+      ERRORS.targetNoLongerAtUnoCount,
+    );
+    expect(game.getPlayer("P1").hand).toHaveLength(1);
   });
 
-  it("pune o acusador quando o alvo já declarou UNO", () => {
+  it("rejeita acusação quando o alvo já declarou UNO", () => {
     const game = setup();
     give(game, "P1", number("red", 1));
-    give(game, "P2", number("red", 2));
+    give(game, "P2", number("red", 1));
     game.declareUno("P2");
-    expect(game.accuseUno("P1", "P2")).toBe(false);
-    expect(game.getPlayer("P1").hand).toHaveLength(3);
+    expect(() => game.accuseUno("P1", "P2")).toThrow(
+      ERRORS.unoAlreadyDeclaredByTarget,
+    );
+    expect(game.getPlayer("P1").hand).toHaveLength(1);
     expect(game.getPlayer("P2").hand).toHaveLength(1);
   });
 
@@ -215,7 +230,7 @@ describe("declaração e acusação de UNO", () => {
   it("penalidades administrativas não criam nem alteram correntes ou turnos", () => {
     const game = setup();
     give(game, "P1", number("red", 1));
-    give(game, "P2", number("red", 2));
+    give(game, "P2", number("red", 1));
     game.drawChain = { type: "DRAW_TWO", amount: 6, activeColor: "red" };
     const currentBefore = game.currentPlayer.id;
     game.accuseUno("P1", "P2");
@@ -227,7 +242,9 @@ describe("declaração e acusação de UNO", () => {
     expect(game.currentPlayer.id).toBe(currentBefore);
 
     give(game, "P2", number("red", 2), number("blue", 3));
-    game.accuseUno("P1", "P2");
+    expect(() => game.accuseUno("P1", "P2")).toThrow(
+      ERRORS.targetNoLongerAtUnoCount,
+    );
     expect(game.drawChain?.amount).toBe(6);
     expect(game.currentPlayer.id).toBe(currentBefore);
   });
@@ -313,35 +330,49 @@ describe("fim de partida e reinício explícito", () => {
 
   it("deriva acusação somente para uma carta sem UNO declarado", () => {
     const game = setup();
-    const target = game.getPlayer("P2");
 
     give(game, "P2", number("red", 1), number("blue", 2));
-    expect(game.canBeAccusedForUno(target)).toBe(false);
+    expect(() => game.accuseUno("P1", "P2")).toThrow(
+      ERRORS.targetNoLongerAtUnoCount,
+    );
 
     give(game, "P2", number("red", 1));
-    target.unoDeclared = false;
-    expect(game.canBeAccusedForUno(target)).toBe(true);
+    game.getPlayer("P2").unoDeclared = false;
+    game.accuseUno("P1", "P2");
 
-    target.unoDeclared = true;
-    expect(game.canBeAccusedForUno(target)).toBe(false);
+    give(game, "P2", number("red", 1));
+    game.getPlayer("P2").unoDeclared = true;
+    expect(() => game.accuseUno("P1", "P2")).toThrow(
+      ERRORS.unoAlreadyDeclaredByTarget,
+    );
 
     give(game, "P2");
-    target.unoDeclared = false;
-    expect(game.canBeAccusedForUno(target)).toBe(false);
+    game.getPlayer("P2").unoDeclared = false;
+    expect(() => game.accuseUno("P1", "P2")).toThrow(
+      ERRORS.targetNoLongerAtUnoCount,
+    );
   });
 
-  it("estado público nunca permite acusar jogador com sete cartas", () => {
+  it("estado público oculta contagem de adversários para não-espiões", () => {
     const game = new Game([
       { id: "P1", nickname: "P1" },
       { id: "P2", nickname: "P2" },
     ]);
     game.start();
-    const opponent = game
-      .toPlayerView("ABCD", "P1", "P1")
-      .players.find((player) => player.id === "P2");
+    const spyId = game.spy.currentPlayerId!;
+    const spyView = game.toPlayerView("ABCD", "P1", spyId);
+    const outsiderId = spyId === "P1" ? "P2" : "P1";
+    const outsiderView = game.toPlayerView("ABCD", "P1", outsiderId);
+    const opponentFromSpy = spyView.players.find(
+      (player) => player.id !== spyId,
+    );
+    const opponentFromOutsider = outsiderView.players.find(
+      (player) => player.id !== outsiderId,
+    );
 
-    expect(opponent?.cardCount).toBe(7);
-    expect(opponent?.canBeAccusedForUno).toBe(false);
+    expect(opponentFromSpy?.cardCount).toBe(7);
+    expect(opponentFromOutsider?.cardCount).toBeNull();
+    expect(opponentFromOutsider?.isAtUnoCount).toBe(false);
   });
 
   it("somente restart explícito cria uma rodada nova com estado limpo", () => {

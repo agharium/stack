@@ -6,6 +6,7 @@ import type {
   GameEvent,
   GameResult,
   PlayerView,
+  PublicPlayer,
 } from "../../../shared/types.js";
 import {
   cardDescriptionPtBr,
@@ -13,6 +14,12 @@ import {
 } from "../../../shared/cards.js";
 import { ERRORS, chainColorMismatch } from "../messages.js";
 import { createDeck, shuffle } from "./deck.js";
+import {
+  buildSpyQueue,
+  createEmptySpyState,
+  pickNextSpyFromQueue,
+  type SpyState,
+} from "./spy.js";
 
 export type GamePhase = "lobby" | "playing" | "finished";
 export type GamePlayer = {
@@ -42,9 +49,20 @@ export function sameGameplayIdentity(a: Card, b: Card): boolean {
   return a.kind !== "number" || (b.kind === "number" && a.value === b.value);
 }
 
+export function buildMatchPlayerOrder(
+  players: Array<{ id: string; connected: boolean }>,
+  random: () => number = Math.random,
+): string[] {
+  return shuffle(
+    players.filter((player) => player.connected).map((player) => player.id),
+    random,
+  );
+}
+
 export class Game {
   phase: GamePhase = "lobby";
   players: GamePlayer[];
+  matchPlayerOrder: string[] = [];
   drawPile: Card[] = [];
   discardPile: Card[] = [];
   currentPlayerIndex = 0;
@@ -55,6 +73,9 @@ export class Game {
   winnerId: string | null = null;
   result: GameResult | null = null;
   events: GameEvent[] = [];
+  lastPlayerId: string | null = null;
+  spy: SpyState = createEmptySpyState();
+  private servedAsSpyThisCycle = new Set<string>();
 
   constructor(
     players: Array<{ id: string; nickname: string; connected?: boolean }>,
@@ -84,16 +105,20 @@ export class Game {
     this.winnerId = null;
     this.result = null;
     this.events = [];
+    this.lastPlayerId = null;
     for (const player of this.players) {
       player.hand = [];
       player.unoDeclared = false;
     }
     this.drawPile = shuffle(createDeck(), this.random);
     this.discardPile = [];
+    this.matchPlayerOrder = buildMatchPlayerOrder(this.players, this.random);
+    this.currentPlayerIndex = 0;
+    this.initSpy();
 
     for (let round = 0; round < 7; round += 1) {
-      for (const player of this.players) {
-        if (player.connected) player.hand.push(this.drawRaw());
+      for (const playerId of this.matchPlayerOrder) {
+        this.getPlayer(playerId).hand.push(this.drawRaw());
       }
     }
 
@@ -104,9 +129,7 @@ export class Game {
     const [startingCard] = this.drawPile.splice(numericIndex, 1);
     this.discardPile.push(startingCard!);
     this.activeColor = startingCard!.color;
-    this.currentPlayerIndex = this.players.findIndex(
-      (player) => player.connected,
-    );
+    this.addEvent("A ordem dos jogadores foi sorteada!");
     this.addEvent(`${this.currentPlayer.nickname} começa a partida.`);
   }
 
@@ -117,6 +140,11 @@ export class Game {
   }
 
   get currentPlayer(): GamePlayer {
+    if (this.matchPlayerOrder.length > 0) {
+      const playerId = this.matchPlayerOrder[this.currentPlayerIndex];
+      if (!playerId) throw new Error(ERRORS.currentPlayerUnavailable);
+      return this.getPlayer(playerId);
+    }
     const player = this.players[this.currentPlayerIndex];
     if (!player) throw new Error(ERRORS.currentPlayerUnavailable);
     return player;
@@ -133,24 +161,140 @@ export class Game {
   }
 
   getPlayerIndexOffset(offset: number): number {
-    if (this.players.length === 0) throw new Error(ERRORS.noPlayers);
+    const order = this.matchPlayerOrder;
+    if (order.length === 0) throw new Error(ERRORS.noPlayers);
     let index = this.currentPlayerIndex;
     const step = offset < 0 ? -this.direction : this.direction;
     let remaining = Math.abs(offset);
     let guard = 0;
     while (remaining > 0) {
-      index = wrapIndex(index + step, this.players.length);
+      index = wrapIndex(index + step, order.length);
       guard += 1;
-      if (this.players[index]!.connected) remaining -= 1;
-      if (guard > this.players.length * Math.max(remaining + 1, 2)) {
+      if (this.getPlayer(order[index]!).connected) remaining -= 1;
+      if (guard > order.length * Math.max(remaining + 1, 2)) {
         throw new Error(ERRORS.noConnectedPlayer);
       }
     }
     return index;
   }
 
+  private connectedMatchPlayerCount(): number {
+    return this.matchPlayerOrder.filter((playerId) =>
+      this.getPlayer(playerId).connected,
+    ).length;
+  }
+
   advanceTurn(offset = 1): void {
+    if (this.phase === "playing" && this.matchPlayerOrder.length > 0) {
+      this.lastPlayerId = this.currentPlayer.id;
+    }
     this.currentPlayerIndex = this.getPlayerIndexOffset(offset);
+    this.onTurnResolved();
+  }
+
+  private onTurnResolved(): void {
+    if (this.phase !== "playing" || !this.spy.currentPlayerId) return;
+    this.spy.remainingTurns -= 1;
+    if (this.spy.remainingTurns <= 0) {
+      this.promoteNextSpy();
+    }
+  }
+
+  private initSpy(): void {
+    this.spy = createEmptySpyState();
+    this.servedAsSpyThisCycle.clear();
+    this.ensureSpyQueue();
+    this.promoteNextSpy();
+  }
+
+  private connectedMatchPlayerIds(): string[] {
+    return this.matchPlayerOrder.filter((playerId) =>
+      this.getPlayer(playerId).connected,
+    );
+  }
+
+  private ensureSpyQueue(): void {
+    if (this.spy.selectionQueue.length > 0) return;
+    const connected = this.connectedMatchPlayerIds();
+    if (connected.length === 0) return;
+
+    const unserved = connected.filter(
+      (playerId) => !this.servedAsSpyThisCycle.has(playerId),
+    );
+    const pool = unserved.length > 0 ? unserved : connected;
+    if (unserved.length === 0) {
+      this.servedAsSpyThisCycle.clear();
+    }
+    this.spy.selectionQueue = buildSpyQueue(pool, this.random);
+  }
+
+  private promoteNextSpy(): void {
+    if (this.phase !== "playing") return;
+
+    if (this.spy.currentPlayerId) {
+      this.servedAsSpyThisCycle.add(this.spy.currentPlayerId);
+    }
+
+    this.ensureSpyQueue();
+    const picked = pickNextSpyFromQueue(
+      this.spy.selectionQueue,
+      (playerId) => this.getPlayer(playerId).connected,
+    );
+    this.spy.selectionQueue = picked.queue;
+
+    if (!picked.nextId) {
+      this.ensureSpyQueue();
+      const retry = pickNextSpyFromQueue(
+        this.spy.selectionQueue,
+        (playerId) => this.getPlayer(playerId).connected,
+      );
+      this.spy.selectionQueue = retry.queue;
+      if (!retry.nextId) {
+        this.spy.currentPlayerId = null;
+        this.spy.remainingTurns = 0;
+        return;
+      }
+      this.activateSpy(retry.nextId);
+      return;
+    }
+
+    this.activateSpy(picked.nextId);
+  }
+
+  private activateSpy(playerId: string): void {
+    this.spy.currentPlayerId = playerId;
+    this.spy.remainingTurns = this.connectedMatchPlayerCount();
+    this.addEvent(
+      `Novo espião: ${this.getPlayer(playerId).nickname} 🕵️`,
+    );
+  }
+
+  private handleSpyDisconnect(playerId: string): void {
+    if (this.spy.currentPlayerId !== playerId) return;
+    this.servedAsSpyThisCycle.add(playerId);
+    this.spy.currentPlayerId = null;
+    this.spy.remainingTurns = 0;
+    this.promoteNextSpy();
+  }
+
+  private handleSpyReconnect(playerId: string): void {
+    if (this.phase !== "playing") return;
+    if (this.servedAsSpyThisCycle.has(playerId)) return;
+    if (this.spy.currentPlayerId === playerId) return;
+    if (this.spy.selectionQueue.includes(playerId)) return;
+    this.spy.selectionQueue.push(playerId);
+  }
+
+  private getNextPlayerId(): string | null {
+    if (this.phase !== "playing" || this.matchPlayerOrder.length === 0) {
+      return null;
+    }
+    if (this.connectedMatchPlayerCount() < 2) return null;
+    try {
+      return this.matchPlayerOrder[this.getPlayerIndexOffset(1)] ?? null;
+    } catch {
+      return null;
+    }
   }
 
   canPlayCard(card: Card): { valid: true } | { valid: false; error: string } {
@@ -294,7 +438,7 @@ export class Game {
             : `${player.nickname} inverteu a direção ${count} vezes.`,
         );
         this.advanceTurn(
-          this.players.filter((p) => p.connected).length === 2 ? count + 1 : 1,
+          this.connectedMatchPlayerCount() === 2 ? count + 1 : 1,
         );
         break;
       case "draw-two":
@@ -428,44 +572,43 @@ export class Game {
     const player = this.getPlayer(playerId);
     if (!player.connected) throw new Error(ERRORS.disconnected);
     if (player.hand.length !== 1) {
-      throw new Error(ERRORS.noUnoNeeded);
+      throw new Error(ERRORS.noLongerAtUnoCount);
     }
     if (player.unoDeclared) throw new Error(ERRORS.unoAlreadyDeclared);
     player.unoDeclared = true;
     this.addEvent(`${player.nickname} gritou UNO!`);
   }
 
-  accuseUno(accuserId: string, targetId: string): boolean {
-    // Allowed at any time during play. Does not require the accuser's turn
-    // and must not change turn, draw-chain, or pending draw/color state.
-    if (this.phase === "finished") throw new Error(ERRORS.gameFinished);
-    if (this.phase !== "playing") throw new Error(ERRORS.gameNotStarted);
-    if (accuserId === targetId) throw new Error(ERRORS.catchSelf);
-    const accuser = this.getPlayer(accuserId);
-    const target = this.getPlayer(targetId);
-    if (!accuser.connected) throw new Error(ERRORS.disconnected);
-
-    const correct = this.canBeAccusedForUno(target);
-    const penalized = correct ? target : accuser;
-    penalized.hand.push(this.drawRaw(), this.drawRaw());
-    penalized.unoDeclared = false;
-    if (correct) {
-      this.addEvent(
-        `${accuser.nickname} pegou ${target.nickname} sem falar UNO! ${target.nickname} comprou 2 cartas.`,
-      );
-    } else {
-      this.addEvent(
-        `${accuser.nickname} acusou ${target.nickname} injustamente e comprou 2 cartas.`,
-      );
-    }
-    return correct;
-  }
-
-  canBeAccusedForUno(player: GamePlayer): boolean {
+  private isUnoVulnerable(player: GamePlayer): boolean {
     return (
       this.phase === "playing" &&
       player.hand.length === 1 &&
       !player.unoDeclared
+    );
+  }
+
+  accuseUno(accuserId: string, targetId: string): void {
+    if (this.phase === "finished") throw new Error(ERRORS.gameFinished);
+    if (this.phase !== "playing") throw new Error(ERRORS.gameNotStarted);
+    if (accuserId === targetId) throw new Error(ERRORS.catchSelf);
+    if (accuserId !== this.spy.currentPlayerId) {
+      throw new Error(ERRORS.spyOnlyAccuse);
+    }
+    const accuser = this.getPlayer(accuserId);
+    const target = this.getPlayer(targetId);
+    if (!accuser.connected) throw new Error(ERRORS.disconnected);
+
+    if (target.unoDeclared) {
+      throw new Error(ERRORS.unoAlreadyDeclaredByTarget);
+    }
+    if (target.hand.length !== 1) {
+      throw new Error(ERRORS.targetNoLongerAtUnoCount);
+    }
+
+    target.hand.push(this.drawRaw(), this.drawRaw());
+    target.unoDeclared = false;
+    this.addEvent(
+      `${accuser.nickname} pegou ${target.nickname} sem falar UNO! ${target.nickname} comprou 2 cartas.`,
     );
   }
 
@@ -503,6 +646,11 @@ export class Game {
   setConnected(playerId: string, connected: boolean): void {
     const player = this.getPlayer(playerId);
     player.connected = connected;
+    if (connected) {
+      this.handleSpyReconnect(playerId);
+    } else if (this.phase === "playing") {
+      this.handleSpyDisconnect(playerId);
+    }
     if (
       !connected &&
       this.phase === "playing" &&
@@ -514,8 +662,21 @@ export class Game {
     }
   }
 
-  toPlayerView(roomCode: string, hostId: string, playerId: string): PlayerView {
+  toPlayerView(
+    roomCode: string,
+    hostId: string,
+    playerId: string,
+    lobbyPlayerIds?: string[],
+  ): PlayerView {
     const viewer = this.getPlayer(playerId);
+    const lobbyOrder = lobbyPlayerIds ?? this.players.map((player) => player.id);
+    const displayOrder =
+      this.phase === "lobby" ? lobbyOrder : this.matchPlayerOrder;
+    const nextPlayerId = this.getNextPlayerId();
+    const previousPlayerId =
+      this.phase === "playing" ? this.lastPlayerId : null;
+    const viewerIsSpy = playerId === this.spy.currentPlayerId;
+    const revealAllCounts = this.phase === "finished";
     return {
       roomCode,
       phase: this.phase,
@@ -523,16 +684,35 @@ export class Game {
       selfId: playerId,
       hand: [...viewer.hand],
       selfUnoDeclared: viewer.unoDeclared,
-      players: this.players.map((player) => ({
-        id: player.id,
-        nickname: player.nickname,
-        connected: player.connected,
-        isHost: player.id === hostId,
-        cardCount: player.hand.length,
-        isCurrentTurn:
-          this.phase === "playing" && player.id === this.currentPlayer.id,
-        canBeAccusedForUno: this.canBeAccusedForUno(player),
-      })),
+      players: displayOrder.map((id) => {
+        const player = this.getPlayer(id);
+        const isSelf = player.id === playerId;
+        const canSeeCount =
+          this.phase === "lobby" ||
+          isSelf ||
+          viewerIsSpy ||
+          revealAllCounts;
+        const playerView: PublicPlayer = {
+          id: player.id,
+          nickname: player.nickname,
+          connected: player.connected,
+          isHost: player.id === hostId,
+          cardCount: canSeeCount ? player.hand.length : null,
+          isAtUnoCount:
+            this.phase === "playing" && player.hand.length === 1,
+          isCurrentTurn:
+            this.phase === "playing" && player.id === this.currentPlayer.id,
+          isPreviousTurn: previousPlayerId === player.id,
+          isNextTurn: nextPlayerId === player.id,
+          isSpy:
+            this.phase === "playing" &&
+            player.id === this.spy.currentPlayerId,
+        };
+        if (viewerIsSpy && this.phase === "playing" && !isSelf) {
+          playerView.canAccuseUno = this.isUnoVulnerable(player);
+        }
+        return playerView;
+      }),
       topDiscard: this.topDiscard,
       activeColor: this.activeColor,
       currentPlayerId:
@@ -558,6 +738,12 @@ export class Game {
           }
         : null,
       events: this.events.slice(-8),
+      currentSpyPlayerId:
+        this.phase === "playing" ? this.spy.currentPlayerId : null,
+      spyRemainingTurns:
+        this.phase === "playing" && viewerIsSpy
+          ? this.spy.remainingTurns
+          : null,
     };
   }
 

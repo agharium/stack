@@ -390,7 +390,6 @@ function GameTable(props: GameProps) {
     () => new Set(props.state.events.map((event) => event.id)),
   );
   const { state } = props;
-  const self = state.players.find((player) => player.id === state.selfId)!;
   const current = state.players.find((player) => player.id === state.currentPlayerId);
   const myTurn = state.currentPlayerId === state.selfId;
   const pendingDraw =
@@ -563,17 +562,60 @@ function GameTable(props: GameProps) {
 
         {props.error && <div className="mx-auto w-full max-w-xl"><ErrorBanner message={props.error} /></div>}
         <section className="mt-3 rounded-[1.5rem] border border-white/10 bg-black/20 p-3 sm:p-5">
-          <div className="mb-3 flex items-center justify-between px-1">
-            <div><span className="font-black">{self.nickname}</span><span className="ml-2 text-sm font-bold text-white/50">{state.hand.length} {state.hand.length === 1 ? "carta" : "cartas"}</span></div>
-            {state.hand.length === 1 && !state.selfUnoDeclared && (
-              <button onClick={props.callUno} className="uno-button">UNO!</button>
-            )}
-            {state.hand.length === 1 && state.selfUnoDeclared && (
-              <span className="rounded-full bg-lime-300/20 px-3 py-2 text-sm font-black text-lime-200">
-                UNO declarado
+          <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 px-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-black">Sua mão</span>
+              <span className="text-sm font-bold text-white/50">
+                · {state.hand.length}{" "}
+                {state.hand.length === 1 ? "carta" : "cartas"}
               </span>
+            </div>
+            {state.phase === "playing" && (
+              <button
+                type="button"
+                onClick={props.callUno}
+                disabled={
+                  props.busy ||
+                  state.hand.length !== 1 ||
+                  state.selfUnoDeclared
+                }
+                aria-label={
+                  state.selfUnoDeclared
+                    ? "UNO já declarado"
+                    : state.hand.length === 1
+                      ? "Declarar UNO"
+                      : "Declarar UNO — disponível com uma carta"
+                }
+                className={[
+                  "uno-button",
+                  state.hand.length === 1 && !state.selfUnoDeclared && !props.busy
+                    ? "cursor-pointer"
+                    : "cursor-not-allowed opacity-60",
+                ].join(" ")}
+              >
+                {state.selfUnoDeclared
+                  ? "UNO declarado ✓"
+                  : state.hand.length === 1
+                    ? "TÔ DE UNO!"
+                    : "Tô de UNO!"}
+              </button>
             )}
           </div>
+          {state.phase === "playing" &&
+            state.currentSpyPlayerId === state.selfId && (
+              <p className="mb-3 px-1 text-sm font-bold text-violet-200">
+                🕵️ Você é o espião
+                {state.spyRemainingTurns !== null && (
+                  <span className="text-white/60">
+                    {" "}
+                    · {state.spyRemainingTurns}{" "}
+                    {state.spyRemainingTurns === 1
+                      ? "turno restante"
+                      : "turnos restantes"}
+                  </span>
+                )}
+              </p>
+            )}
           <div className="grid grid-cols-1 gap-3 min-[430px]:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
             {handGroups.map((group) => (
               <section

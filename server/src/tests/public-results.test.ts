@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Card, CardColor } from "../../../shared/types.js";
 import { Game } from "../game/game.js";
+import { bootstrapSpy } from "./test-helpers.js";
 
 let serial = 50_000;
 const number = (color: CardColor, value: number): Card => ({
@@ -21,6 +22,8 @@ function setup(): Game {
     () => 0.3,
   );
   game.phase = "playing";
+  game.matchPlayerOrder = ["P1", "P2", "P3", "P4"];
+  bootstrapSpy(game, ["P1", "P2", "P3", "P4"]);
   game.currentPlayerIndex = 0;
   game.activeColor = "green";
   game.discardPile = [number("green", 9)];
@@ -53,13 +56,19 @@ describe("estado público dos jogadores", () => {
       view.players.filter((player) => player.isCurrentTurn).map((p) => p.id),
     ).toEqual(["P1"]);
     expect(
-      view.players.find((player) => player.id === "P2")
-        ?.canBeAccusedForUno,
+      view.players.find((player) => player.id === "P2")?.isAtUnoCount,
     ).toBe(true);
     expect(
-      view.players.find((player) => player.id === "P3")
-        ?.canBeAccusedForUno,
+      view.players.find((player) => player.id === "P3")?.isAtUnoCount,
     ).toBe(false);
+
+    const outsider = game.toPlayerView("ABCD", "P1", "P2");
+    expect(outsider.players.map((player) => player.cardCount)).toEqual([
+      null,
+      1,
+      null,
+      null,
+    ]);
   });
 
   it("não serializa cartas nem IDs da mão dos adversários", () => {

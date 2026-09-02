@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Card, CardColor } from "../../../shared/types.js";
 import { Game } from "../game/game.js";
 import { ERRORS } from "../messages.js";
+import { bootstrapSpy, setSpy } from "./test-helpers.js";
 
 let serial = 10_000;
 const number = (color: CardColor, value: number): Card => ({
@@ -26,6 +27,8 @@ function setup(names = ["P1", "P2", "P3", "P4"]): Game {
     () => 0.25,
   );
   game.phase = "playing";
+  game.matchPlayerOrder = [...names];
+  bootstrapSpy(game, names);
   game.discardPile = [number("green", 9)];
   game.activeColor = "green";
   game.currentPlayerIndex = 0;
@@ -384,7 +387,8 @@ describe("playing the just-drawn card", () => {
     give(game, "P2", number("red", 4));
     game.drawPile = [number("blue", 8), number("red", 6), drawn];
     game.drawOneCard("P1");
-    expect(game.accuseUno("P3", "P2")).toBe(true);
+    setSpy(game, "P3");
+    game.accuseUno("P3", "P2");
     expect(game.pendingDrawPlay?.cardId).toBe(drawn.id);
     expect(() => game.drawOneCard("P1")).toThrow(
       ERRORS.resolveDrawn,

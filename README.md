@@ -4,19 +4,19 @@ STACK! is a real-time multiplayer card game inspired by UNO, with custom house r
 
 No accounts. No database. The server is authoritative: clients send intentions, and the backend decides whether a play is legal.
 
-Supports multiplayer rooms with 2–12 players in the current implementation.
+Supports multiplayer rooms with 2-12 players in the current implementation.
 
 ## Features
 
 - Real-time Socket.IO multiplayer
 - Create or join a room with a short 4-character code
-- Private hands; opponents only see public card counts
-- Always-visible player board (names, counts, whose turn it is)
+- Private hands; opponents only see exact counts if they are the current Spy
+- Always-visible player board (names, UNO signal, whose turn it is, spy marker)
 - Standard UNO-style 108-card deck with discard recycling
 - Custom draw-chain system (type-locked stacking plus Skip/Reverse defenses)
 - Play multiple identical cards together; effects stack
 - Immediate play of a just-drawn card, including matching copies
-- UNO declaration and anytime accusation (server-authoritative)
+- UNO declaration and Espi�o-only accusation (server-authoritative)
 - Match history / event log
 - Final ranking by remaining cards after a win
 - Rematches in the same room (host starts the next round)
@@ -46,7 +46,7 @@ Open `http://localhost:3000`. The API and Socket.IO run on port 3001; Vite proxi
 npm test
 ```
 
-Coverage includes deck generation, turn movement, custom draw chains, grouped identical-card plays, UNO accusations, Wild final-card restrictions, public vs private serialization, and restart behavior.
+Coverage includes deck generation, turn movement, custom draw chains, grouped identical-card plays, Espi�o privacy and rotation, UNO accusations, Wild final-card restrictions, public vs private serialization, and restart behavior.
 
 ## Production
 
@@ -78,10 +78,10 @@ STACK! intentionally does not follow official UNO rules exactly. These house rul
 
 ### Basic play
 
-- The host starts the match. Each connected player is dealt seven cards.
+- The host starts the match. Player order is randomized at the beginning of each match. Each connected player is dealt seven cards.
 - The initial discard is always a numeric colored card.
-- A card is playable if it matches the active color or the top card’s face/action. Wild cards are always playable (subject to the final-card restriction).
-- Wild Draw Four may be played whenever a Wild would be legal. There is no “must have no matching color” restriction.
+- A card is playable if it matches the active color or the top card?s face/action. Wild cards are always playable (subject to the final-card restriction).
+- Wild Draw Four may be played whenever a Wild would be legal. There is no ?must have no matching color? restriction.
 
 ### Playing identical cards
 
@@ -98,21 +98,24 @@ On a normal turn, drawing one card does **not** always end the turn. If that spe
 Draw Two and Wild Draw Four start **separate, type-locked** chains.
 
 - A Draw Two chain can only be increased by more Draw Twos (any color). Each card adds +2.
-- A Draw Four chain can only be increased by more Wild Draw Fours. Each card adds +4. The chosen color becomes the chain’s active color.
+- A Draw Four chain can only be increased by more Wild Draw Fours. Each card adds +4. The chosen color becomes the chain?s active color.
 
 While a chain is active, the targeted player may only:
 
 - stack the same draw type
-- play a Skip whose color matches the chain’s active color (penalty stays; threat moves to the next player)
-- play a Reverse whose color matches the chain’s active color (penalty stays; direction flips; threat moves the new way — often back at the previous player)
+- play a Skip whose color matches the chain?s active color (penalty stays; threat moves to the next player)
+- play a Reverse whose color matches the chain?s active color (penalty stays; direction flips; threat moves the new way ? often back at the previous player)
 - accept the full accumulated penalty and draw that many cards (then the chain ends and play continues)
 
 ### UNO
 
-Everyone can see public card counts. When a player’s hand is exactly one card, they should declare UNO. Any opponent may accuse them **at any time** during the match — not only on a particular turn.
+Opponent hand sizes are normally hidden. One randomly selected **Espião** temporarily sees everyone's remaining card counts for one full table cycle. Every player becomes Espião once before the selection pool resets. Only the current Espi�o may accuse another player of failing to declare UNO.
 
-- Correct accusation (1 card, UNO not declared): that player draws 2.
-- False accusation (any other case): the accuser draws 2.
+When a player reaches one card, they race to declare UNO with `Tô de UNO!` before the current Espi�o catches them with `Não falou UNO!`. If the player declares first, they are safe. If the Espi�o accuses first, the player draws two cards. UNO declaration and accusation are resolved authoritatively by server processing order.
+
+- Successful accusation (1 card, UNO not declared): target draws 2.
+- Stale accusation after UNO was declared: rejected with no penalty.
+- Stale UNO declaration after a successful accusation: rejected with no effect.
 
 These draws are administrative. They do not start a draw chain and do not change whose turn it is.
 
@@ -128,9 +131,9 @@ Room codes are four uppercase characters. Confusing characters like `I`, `O`, `0
 
 ## Public vs private game state
 
-**Public:** player names, card counts, whose turn it is, host/connected status, game status, draw-chain info, events, and the final ranking.
+**Public:** player names, whose turn it is, host/connected status, current Espi�o, whether a player is at UNO count (one card), game status, draw-chain info, events, and the final ranking (including card counts).
 
-**Private:** the actual cards in an opponent’s hand and those cards’ IDs. Each client only receives its own hand.
+**Private:** exact opponent card counts (except for the current Espi?o), the actual cards in an opponent's hand, those cards' IDs, and whether opponents declared UNO. Each client only receives its own hand.
 
 ## In-memory limitation
 

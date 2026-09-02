@@ -27,8 +27,13 @@ export const ERRORS = {
   noPendingDrawnKeep: "Não há uma carta comprada aguardando sua decisão.",
   noDrawPenalty: "Não há uma corrente de compra para aceitar.",
   noUnoNeeded: "Você não precisa gritar UNO agora.",
+  noLongerAtUnoCount: "Você não está mais com uma carta.",
   unoAlreadyDeclared: "Você já declarou UNO.",
+  unoAlreadyDeclaredByTarget: "Esse jogador já declarou UNO.",
+  targetNoLongerAtUnoCount: "Esse jogador não está mais com uma carta.",
   catchSelf: "Você não pode denunciar a si mesmo.",
+  spyOnlyAccuse:
+    "Apenas o espião pode acusar outro jogador de não ter falado UNO.",
   disconnected: "Você está desconectado.",
   gameNotStarted: "A partida ainda não começou.",
   gameFinished: "A partida já terminou.",

@@ -29,9 +29,13 @@ export type PublicPlayer = {
   nickname: string;
   connected: boolean;
   isHost: boolean;
-  cardCount: number;
+  cardCount: number | null;
+  isAtUnoCount: boolean;
+  canAccuseUno?: boolean;
   isCurrentTurn: boolean;
-  canBeAccusedForUno: boolean;
+  isPreviousTurn: boolean;
+  isNextTurn: boolean;
+  isSpy: boolean;
 };
 
 export type FinalStanding = {
@@ -69,6 +73,8 @@ export type PlayerView = {
   winnerId: string | null;
   result: GameResult | null;
   events: GameEvent[];
+  currentSpyPlayerId: string | null;
+  spyRemainingTurns: number | null;
 };
 
 export type Ack<T = undefined> =

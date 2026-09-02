@@ -6,6 +6,16 @@ type Props = {
   onAccuseUno: (playerId: string) => void;
 };
 
+function formatCardCount(player: PublicPlayer, isSelf: boolean): string {
+  if (player.cardCount !== null) {
+    return `${player.cardCount} ${player.cardCount === 1 ? "carta" : "cartas"}`;
+  }
+  if (isSelf) {
+    return "";
+  }
+  return "? cartas";
+}
+
 export function PlayerBoard({ players, selfId, onAccuseUno }: Props) {
   return (
     <section
@@ -21,6 +31,8 @@ export function PlayerBoard({ players, selfId, onAccuseUno }: Props) {
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
         {players.map((player) => {
           const isSelf = player.id === selfId;
+          const cardLabel = formatCardCount(player, isSelf);
+          const showAccuse = player.canAccuseUno === true;
           return (
             <article
               key={player.id}
@@ -32,6 +44,15 @@ export function PlayerBoard({ players, selfId, onAccuseUno }: Props) {
               ].join(" ")}
             >
               <div className="flex min-w-0 items-center gap-1.5">
+                {player.isSpy && (
+                  <span
+                    aria-label="Este jogador é o espião atual."
+                    title="Espião"
+                    className="shrink-0 text-sm"
+                  >
+                    🕵️
+                  </span>
+                )}
                 <span className="truncate text-sm font-black">
                   {player.nickname}
                 </span>
@@ -50,21 +71,34 @@ export function PlayerBoard({ players, selfId, onAccuseUno }: Props) {
                   </span>
                 )}
               </div>
-              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                <strong
-                  className={
-                    player.cardCount === 1
-                      ? "text-base text-amber-300"
-                      : "text-sm text-white/85"
-                  }
-                >
-                  {player.cardCount}{" "}
-                  {player.cardCount === 1 ? "carta" : "cartas"}
-                </strong>
-                {player.isCurrentTurn && (
-                  <span className="text-[10px] font-black uppercase text-lime-200">
-                    {isSelf ? "Sua vez" : "Jogando agora"}
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                {player.isPreviousTurn && (
+                  <span className="rounded-full bg-slate-400/20 px-2 py-0.5 text-[10px] font-black uppercase text-slate-200">
+                    Anterior
                   </span>
+                )}
+                {player.isCurrentTurn && (
+                  <span className="rounded-full bg-lime-300/25 px-2 py-0.5 text-[10px] font-black uppercase text-lime-200">
+                    Atual
+                  </span>
+                )}
+                {player.isNextTurn && (
+                  <span className="rounded-full bg-cyan-300/20 px-2 py-0.5 text-[10px] font-black uppercase text-cyan-200">
+                    Próximo
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                {cardLabel && (
+                  <strong
+                    className={
+                      player.isAtUnoCount && player.cardCount === 1
+                        ? "text-base text-amber-300"
+                        : "text-sm text-white/85"
+                    }
+                  >
+                    {cardLabel}
+                  </strong>
                 )}
                 {!player.connected && (
                   <span className="text-[10px] font-bold text-rose-300">
@@ -72,11 +106,13 @@ export function PlayerBoard({ players, selfId, onAccuseUno }: Props) {
                   </span>
                 )}
               </div>
-              {!isSelf && player.canBeAccusedForUno && (
+              {showAccuse && (
                 <button
                   type="button"
                   onClick={() => onAccuseUno(player.id)}
-                  className="mt-2 min-h-9 rounded-full bg-amber-400 px-3 text-[11px] font-black text-slate-950"
+                  title="Acusar de não ter falado UNO"
+                  aria-label={`Acusar ${player.nickname} de não ter falado UNO`}
+                  className="mt-2 min-h-9 cursor-pointer rounded-full bg-amber-400 px-3 text-[11px] font-black text-slate-950"
                 >
                   Não falou UNO!
                 </button>

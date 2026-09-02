@@ -3,6 +3,7 @@ import type { Card, CardColor } from "../../../shared/types.js";
 import { createDeck } from "../game/deck.js";
 import { Game, wrapIndex } from "../game/game.js";
 import { ERRORS } from "../messages.js";
+import { bootstrapSpy, setSpy } from "./test-helpers.js";
 
 let serial = 0;
 const number = (color: CardColor, value: number): Card => ({
@@ -27,6 +28,8 @@ function gameFor(names = ["P1", "P2", "P3"]): Game {
     () => 0.42,
   );
   game.phase = "playing";
+  game.matchPlayerOrder = [...names];
+  bootstrapSpy(game, names);
   game.currentPlayerIndex = 0;
   game.direction = 1;
   game.discardPile = [number("red", 5)];
@@ -50,15 +53,20 @@ describe("deck and setup", () => {
   });
 
   it("deals seven cards to every player and starts on a number", () => {
-    const game = new Game([
-      { id: "a", nickname: "A" },
-      { id: "b", nickname: "B" },
-      { id: "c", nickname: "C" },
-    ]);
+    const game = new Game(
+      [
+        { id: "a", nickname: "A" },
+        { id: "b", nickname: "B" },
+        { id: "c", nickname: "C" },
+      ],
+      () => 0,
+    );
     game.start();
     expect(game.players.map((player) => player.hand.length)).toEqual([7, 7, 7]);
     expect(game.topDiscard?.kind).toBe("number");
-    expect(game.currentPlayer.id).toBe("a");
+    expect(game.matchPlayerOrder).toHaveLength(3);
+    expect(new Set(game.matchPlayerOrder).size).toBe(3);
+    expect(game.currentPlayer.id).toBe(game.matchPlayerOrder[0]);
   });
 
   it("wraps turn indices in both directions", () => {
@@ -286,7 +294,8 @@ describe("winning and UNO", () => {
     give(game, "P1", playable, number("blue", 4));
     game.playCard("P1", playable.id);
     expect(game.getPlayer("P1").unoDeclared).toBe(false);
-    expect(game.accuseUno("P2", "P1")).toBe(true);
+    setSpy(game, "P2");
+    game.accuseUno("P2", "P1");
     expect(game.getPlayer("P1").hand).toHaveLength(3);
     expect(game.getPlayer("P1").unoDeclared).toBe(false);
   });

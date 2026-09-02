@@ -29,6 +29,7 @@ export function registerSocketHandlers(
         room.code,
         room.hostId,
         player.id,
+        room.players.map((candidate) => candidate.id),
       );
       io.to(player.socketId).emit("state-update", state);
     }
