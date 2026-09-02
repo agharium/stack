@@ -5,6 +5,14 @@ type Props = {
   onBack: () => void;
 };
 
+function winsLabel(wins: number): string {
+  return `${wins} ${wins === 1 ? "vitória" : "vitórias"}`;
+}
+
+function gamesLabel(gamesPlayed: number): string {
+  return `${gamesPlayed} ${gamesPlayed === 1 ? "partida" : "partidas"}`;
+}
+
 export function RankingPage({ onBack }: Props) {
   const [ranking, setRanking] = useState<RankingEntry[]>([]);
   const [error, setError] = useState("");
@@ -59,22 +67,14 @@ export function RankingPage({ onBack }: Props) {
               key={entry.userId}
               className="rounded-2xl border border-white/15 bg-white/10 p-5 backdrop-blur-xl"
             >
-              <div className="flex items-baseline justify-between gap-3">
-                <strong className="text-xl font-black">
-                  {index + 1}. {entry.name}
-                </strong>
-                <span className="text-lg font-black text-amber-200">
-                  {entry.totalPoints} pts
-                </span>
-              </div>
+              <strong className="text-xl font-black">
+                {index + 1}. {entry.name}
+              </strong>
               <p className="mt-2 text-sm font-bold text-indigo-100">
-                {entry.wins}{" "}
-                {entry.wins === 1 ? "vitória" : "vitórias"} ·{" "}
-                {entry.gamesPlayed}{" "}
-                {entry.gamesPlayed === 1 ? "partida" : "partidas"}
+                {winsLabel(entry.wins)} · {gamesLabel(entry.gamesPlayed)}
               </p>
               <p className="mt-1 text-sm text-indigo-200">
-                {entry.winRate}% de vitórias
+                {Math.round(entry.winRate * 100)}% de vitórias
               </p>
             </li>
           ))}

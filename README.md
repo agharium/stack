@@ -63,16 +63,15 @@ PostgreSQL does **not** store active gameplay (hands, turns, draw chains, Spy ro
 
 ## Ranking
 
-Points by final position:
+The global leaderboard is based only on match victories. Every authenticated match win counts as one victory. Other finishing positions do not award points.
 
-| Position | Points |
-|----------|--------|
-| 1st | 10 |
-| 2nd | 6 |
-| 3rd | 4 |
-| 4th+ | 1 |
+- **Vitórias** — primary ranking value (descending)
+- **Partidas** — games played (informational; fewer games is only a tie-breaker)
+- **Taxa de vitória** — informational only; does not affect order
 
-Tied positions share the same points (e.g. 1, 2, 2, 4 ? 10, 6, 6, 1). Only results linked to a registered account count toward the leaderboard. Guest results are saved for match history integrity but excluded from aggregation.
+Only results linked to a registered account count toward the leaderboard. Guest results are saved for match history integrity but excluded from aggregation.
+
+The end-of-match screen may still list players by remaining cards for that game. That visual summary is separate from the persistent highscore.
 
 ## Tech stack
 

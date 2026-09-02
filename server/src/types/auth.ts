@@ -16,11 +16,8 @@ export type AuthMeResponse =
 export type RankingEntryDto = {
   userId: string;
   name: string;
-  totalPoints: number;
-  gamesPlayed: number;
   wins: number;
-  secondPlaces: number;
-  thirdPlaces: number;
+  gamesPlayed: number;
   winRate: number;
 };
 

@@ -12,15 +12,9 @@ export class RankingService {
     return rows.map((row) => ({
       userId: row.userId,
       name: row.name,
-      totalPoints: row.totalPoints,
-      gamesPlayed: row.gamesPlayed,
       wins: row.wins,
-      secondPlaces: row.secondPlaces,
-      thirdPlaces: row.thirdPlaces,
-      winRate:
-        row.gamesPlayed > 0
-          ? Math.round((row.wins / row.gamesPlayed) * 100)
-          : 0,
+      gamesPlayed: row.gamesPlayed,
+      winRate: row.gamesPlayed > 0 ? row.wins / row.gamesPlayed : 0,
     }));
   }
 }

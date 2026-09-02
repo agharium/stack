@@ -15,25 +15,29 @@ export type CreateMatchInput = {
     displayNameSnapshot: string;
     position: number;
     cardsRemaining: number;
-    pointsAwarded: number;
   }>;
+};
+
+export type LeaderboardRow = {
+  userId: string;
+  name: string;
+  gamesPlayed: number;
+  wins: number;
 };
 
 export type MatchRepository = {
   findBySessionId(sessionId: string): Promise<MatchWithResults | null>;
   createCompletedMatch(input: CreateMatchInput): Promise<MatchWithResults>;
-  aggregateLeaderboard(): Promise<
-    Array<{
-      userId: string;
-      name: string;
-      totalPoints: number;
-      gamesPlayed: number;
-      wins: number;
-      secondPlaces: number;
-      thirdPlaces: number;
-    }>
-  >;
+  aggregateLeaderboard(): Promise<LeaderboardRow[]>;
 };
+
+function sortLeaderboard(rows: LeaderboardRow[]): LeaderboardRow[] {
+  return [...rows].sort((a, b) => {
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    if (a.gamesPlayed !== b.gamesPlayed) return a.gamesPlayed - b.gamesPlayed;
+    return a.name.localeCompare(b.name, "pt-BR");
+  });
+}
 
 export const matchRepository: MatchRepository = {
   findBySessionId(sessionId) {
@@ -59,7 +63,6 @@ export const matchRepository: MatchRepository = {
               displayNameSnapshot: result.displayNameSnapshot,
               position: result.position,
               cardsRemaining: result.cardsRemaining,
-              pointsAwarded: result.pointsAwarded,
             })),
           },
         },
@@ -75,39 +78,24 @@ export const matchRepository: MatchRepository = {
       include: { user: { select: { id: true, name: true } } },
     });
 
-    const byUser = new Map<
-      string,
-      {
-        userId: string;
-        name: string;
-        totalPoints: number;
-        gamesPlayed: number;
-        wins: number;
-        secondPlaces: number;
-        thirdPlaces: number;
-      }
-    >();
+    const byUser = new Map<string, LeaderboardRow>();
 
     for (const result of results) {
       if (!result.userId || !result.user) continue;
       const entry = byUser.get(result.userId) ?? {
         userId: result.userId,
         name: result.user.name,
-        totalPoints: 0,
         gamesPlayed: 0,
         wins: 0,
-        secondPlaces: 0,
-        thirdPlaces: 0,
       };
-      entry.totalPoints += result.pointsAwarded;
       entry.gamesPlayed += 1;
       if (result.position === 1) entry.wins += 1;
-      if (result.position === 2) entry.secondPlaces += 1;
-      if (result.position === 3) entry.thirdPlaces += 1;
       entry.name = result.user.name;
       byUser.set(result.userId, entry);
     }
 
-    return [...byUser.values()].sort((a, b) => b.totalPoints - a.totalPoints);
+    return sortLeaderboard([...byUser.values()]);
   },
 };
+
+export { sortLeaderboard };

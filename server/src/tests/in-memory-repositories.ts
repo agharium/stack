@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
+import type { Match, MatchResult } from "@prisma/client";
 import type { UserRecord, UserRepository } from "../repositories/user-repository.js";
 import type {
   CreateMatchInput,
+  LeaderboardRow,
   MatchRepository,
   MatchWithResults,
 } from "../repositories/match-repository.js";
-import type { Match, MatchResult } from "@prisma/client";
+import { sortLeaderboard } from "../repositories/match-repository.js";
 
 export class InMemoryUserRepository implements UserRepository {
   private users = new Map<string, UserRecord>();
@@ -101,7 +103,6 @@ export class InMemoryMatchRepository implements MatchRepository {
       displayNameSnapshot: result.displayNameSnapshot,
       position: result.position,
       cardsRemaining: result.cardsRemaining,
-      pointsAwarded: result.pointsAwarded,
       createdAt: now,
     }));
     const stored = { ...match, results };
@@ -109,19 +110,8 @@ export class InMemoryMatchRepository implements MatchRepository {
     return stored;
   }
 
-  async aggregateLeaderboard() {
-    const byUser = new Map<
-      string,
-      {
-        userId: string;
-        name: string;
-        totalPoints: number;
-        gamesPlayed: number;
-        wins: number;
-        secondPlaces: number;
-        thirdPlaces: number;
-      }
-    >();
+  async aggregateLeaderboard(): Promise<LeaderboardRow[]> {
+    const byUser = new Map<string, LeaderboardRow>();
 
     for (const match of this.matches.values()) {
       for (const result of match.results) {
@@ -129,22 +119,16 @@ export class InMemoryMatchRepository implements MatchRepository {
         const entry = byUser.get(result.userId) ?? {
           userId: result.userId,
           name: result.displayNameSnapshot,
-          totalPoints: 0,
           gamesPlayed: 0,
           wins: 0,
-          secondPlaces: 0,
-          thirdPlaces: 0,
         };
-        entry.totalPoints += result.pointsAwarded;
         entry.gamesPlayed += 1;
         if (result.position === 1) entry.wins += 1;
-        if (result.position === 2) entry.secondPlaces += 1;
-        if (result.position === 3) entry.thirdPlaces += 1;
         byUser.set(result.userId, entry);
       }
     }
 
-    return [...byUser.values()].sort((a, b) => b.totalPoints - a.totalPoints);
+    return sortLeaderboard([...byUser.values()]);
   }
 
   getAll(): MatchWithResults[] {

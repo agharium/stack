@@ -1,5 +1,4 @@
 import type { GameResult } from "../../../shared/types.js";
-import { getPointsForPosition } from "../lib/scoring.js";
 import {
   matchRepository,
   type MatchRepository,
@@ -48,7 +47,6 @@ export class MatchService {
           displayNameSnapshot: standing.nickname,
           position: standing.position,
           cardsRemaining: standing.cardsRemaining,
-          pointsAwarded: getPointsForPosition(standing.position),
         };
       }),
     });
