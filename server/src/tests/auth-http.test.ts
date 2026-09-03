@@ -30,5 +30,14 @@ describe("home autenticado x convidado", () => {
     );
     expect(source).toContain("{!authUser && (");
     expect(source).toContain("Seu nome");
+    expect(source).toContain("refreshSocketSession");
+    expect(source).toMatch(
+      /if \(!authUser\) \{[\s\S]*Informe seu nome para jogar como convidado/,
+    );
+    expect(source).toContain("authUser ? {} : { nickname: nickname.trim() }");
+    expect(source).toContain("? { roomCode: code }");
+    expect(source).toContain(
+      ": { nickname: nickname.trim(), roomCode: code }",
+    );
   });
 });

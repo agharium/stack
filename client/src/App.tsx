@@ -40,6 +40,15 @@ const SESSION_KEY = "stack-session";
 type Session = { nickname: string; roomCode: string; playerId: string };
 type HomeScreen = "home" | "login" | "register" | "profile" | "ranking";
 
+function refreshSocketSession(): void {
+  // Login/logout happens over HTTP after the initial Socket.IO handshake.
+  // Reconnect so the next handshake carries the updated session cookie.
+  if (socket.connected) {
+    socket.disconnect();
+  }
+  socket.connect();
+}
+
 function readSession(): Session | null {
   try {
     const value = sessionStorage.getItem(SESSION_KEY);
@@ -102,6 +111,7 @@ export default function App() {
         if (result.authenticated) {
           setAuthUser(result.user);
           setNickname(result.user.name);
+          refreshSocketSession();
         }
       })
       .catch(() => {
@@ -115,20 +125,19 @@ export default function App() {
       setConnected(true);
       const saved = readSession();
       if (!saved) return;
-      socket.emit(
-        "join-room",
-        {
-          nickname: authUser?.name ?? saved.nickname,
-          roomCode: saved.roomCode,
-          playerId: saved.playerId,
-        },
-        (result) => {
-          if (!result.ok) {
-            setError(result.error);
-            setState(null);
-          }
-        },
-      );
+      const payload = authUser
+        ? { roomCode: saved.roomCode, playerId: saved.playerId }
+        : {
+            nickname: saved.nickname,
+            roomCode: saved.roomCode,
+            playerId: saved.playerId,
+          };
+      socket.emit("join-room", payload, (result) => {
+        if (!result.ok) {
+          setError(result.error);
+          setState(null);
+        }
+      });
     };
     const onDisconnect = () => setConnected(false);
     const onState = (next: PlayerView) => {
@@ -147,33 +156,41 @@ export default function App() {
       socket.off("state-update", onState);
       socket.off("action-error", onError);
     };
-  }, []);
+  }, [authUser]);
 
   const saveSession = (next: Session) => {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(next));
     setSession(next);
   };
 
-  const displayName = authUser?.name ?? nickname.trim();
+  const applyAuthenticatedUser = (user: PrivateAccount) => {
+    setAuthUser(user);
+    setNickname(user.name);
+    refreshSocketSession();
+  };
 
   const createRoom = (event: FormEvent) => {
     event.preventDefault();
-    if (!authUser && displayName.length < 2) {
-      setError("Informe seu nome para jogar como convidado.");
-      return;
+    if (!authChecked) return;
+    if (!authUser) {
+      const guestName = nickname.trim();
+      if (guestName.length < 2) {
+        setError("Informe seu nome para jogar como convidado.");
+        return;
+      }
     }
     setBusy(true);
     socket.emit(
       "create-room",
-      authUser ? {} : { nickname: displayName },
+      authUser ? {} : { nickname: nickname.trim() },
       (result) => {
         setBusy(false);
         if (!result.ok) return setError(result.error);
-        const next = {
-          nickname: displayName,
+        const publicName = authUser?.name ?? nickname.trim();
+        saveSession({
+          nickname: publicName,
           ...result.data,
-        };
-        saveSession(next);
+        });
         setError("");
       },
     );
@@ -181,9 +198,13 @@ export default function App() {
 
   const joinRoom = (event: FormEvent) => {
     event.preventDefault();
-    if (!authUser && displayName.length < 2) {
-      setError("Informe seu nome para jogar como convidado.");
-      return;
+    if (!authChecked) return;
+    if (!authUser) {
+      const guestName = nickname.trim();
+      if (guestName.length < 2) {
+        setError("Informe seu nome para jogar como convidado.");
+        return;
+      }
     }
     setBusy(true);
     const code = roomCode.trim().toUpperCase();
@@ -191,11 +212,12 @@ export default function App() {
       "join-room",
       authUser
         ? { roomCode: code }
-        : { nickname: displayName, roomCode: code },
+        : { nickname: nickname.trim(), roomCode: code },
       (result) => {
         setBusy(false);
         if (!result.ok) return setError(result.error);
-        saveSession({ nickname: displayName, ...result.data });
+        const publicName = authUser?.name ?? nickname.trim();
+        saveSession({ nickname: publicName, ...result.data });
         setError("");
       },
     );
@@ -208,6 +230,7 @@ export default function App() {
       // Local logout still proceeds.
     }
     setAuthUser(null);
+    refreshSocketSession();
     leave();
   };
 
@@ -285,8 +308,7 @@ export default function App() {
           onBack={() => setHomeScreen("home")}
           onGoRegister={() => setHomeScreen("register")}
           onSuccess={(user) => {
-            setAuthUser(user);
-            setNickname(user.name);
+            applyAuthenticatedUser(user);
             setHomeScreen("home");
           }}
         />
@@ -298,8 +320,7 @@ export default function App() {
           onBack={() => setHomeScreen("home")}
           onGoLogin={() => setHomeScreen("login")}
           onSuccess={(user) => {
-            setAuthUser(user);
-            setNickname(user.name);
+            applyAuthenticatedUser(user);
             setHomeScreen("home");
           }}
         />
@@ -310,7 +331,10 @@ export default function App() {
         <ProfilePage
           user={authUser}
           onBack={() => setHomeScreen("home")}
-          onUpdated={setAuthUser}
+          onUpdated={(user) => {
+            setAuthUser(user);
+            setNickname(user.name);
+          }}
         />
       );
     }

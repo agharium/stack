@@ -8,6 +8,7 @@ import type {
 } from "../../../shared/types.js";
 import { RoomManager, type AuthIdentity, type Room } from "../rooms/room-manager.js";
 import { ERRORS } from "../messages.js";
+import { authService } from "../services/auth-service.js";
 import { matchService } from "../services/match-service.js";
 
 type GameServer = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -20,12 +21,30 @@ const failure = <T = undefined>(error: unknown): Ack<T> =>
     error: error instanceof Error ? error.message : ERRORS.unexpected,
   }) as Ack<T>;
 
-function readAuthFromSocket(socket: GameSocket): AuthIdentity | null {
+function reloadSession(socket: GameSocket): Promise<void> {
+  const session = (socket.request as Request).session;
+  if (!session?.reload) return Promise.resolve();
+  return new Promise((resolve) => {
+    session.reload(() => resolve());
+  });
+}
+
+async function readAuthFromSocket(
+  socket: GameSocket,
+): Promise<AuthIdentity | null> {
+  await reloadSession(socket);
   const session = (socket.request as Request).session;
   const userId = session?.userId;
-  const name = session?.userName;
-  if (!userId || !name) return null;
-  return { userId, name };
+  if (!userId) return null;
+
+  if (session.userName) {
+    return { userId, name: session.userName };
+  }
+
+  const account = await authService.getAccount(userId);
+  if (!account) return null;
+  session.userName = account.name;
+  return { userId: account.id, name: account.name };
 }
 
 export function registerSocketHandlers(
@@ -89,44 +108,48 @@ export function registerSocketHandlers(
 
   io.on("connection", (socket) => {
     socket.on("create-room", (payload, ack) => {
-      try {
-        const auth = readAuthFromSocket(socket);
-        const { room, player } = manager.createRoom(
-          socket.id,
-          auth,
-          payload.nickname,
-        );
-        void socket.join(room.code);
-        emitState(room);
-        ack({
-          ok: true,
-          data: { roomCode: room.code, playerId: player.id },
-        });
-      } catch (error) {
-        ack(failure<{ roomCode: string; playerId: string }>(error));
-      }
+      void (async () => {
+        try {
+          const auth = await readAuthFromSocket(socket);
+          const { room, player } = manager.createRoom(
+            socket.id,
+            auth,
+            auth ? undefined : payload.nickname,
+          );
+          void socket.join(room.code);
+          emitState(room);
+          ack({
+            ok: true,
+            data: { roomCode: room.code, playerId: player.id },
+          });
+        } catch (error) {
+          ack(failure<{ roomCode: string; playerId: string }>(error));
+        }
+      })();
     });
 
     socket.on("join-room", (payload, ack) => {
-      try {
-        const auth = readAuthFromSocket(socket);
-        const { room, player } = manager.joinRoom(
-          payload.roomCode,
-          socket.id,
-          auth,
-          payload.nickname,
-          payload.playerId,
-        );
-        void socket.join(room.code);
-        emitState(room);
-        maybePersistMatch(room);
-        ack({
-          ok: true,
-          data: { roomCode: room.code, playerId: player.id },
-        });
-      } catch (error) {
-        ack(failure<{ roomCode: string; playerId: string }>(error));
-      }
+      void (async () => {
+        try {
+          const auth = await readAuthFromSocket(socket);
+          const { room, player } = manager.joinRoom(
+            payload.roomCode,
+            socket.id,
+            auth,
+            auth ? undefined : payload.nickname,
+            payload.playerId,
+          );
+          void socket.join(room.code);
+          emitState(room);
+          maybePersistMatch(room);
+          ack({
+            ok: true,
+            data: { roomCode: room.code, playerId: player.id },
+          });
+        } catch (error) {
+          ack(failure<{ roomCode: string; playerId: string }>(error));
+        }
+      })();
     });
 
     const afterGameAction = (room: Room): void => {

@@ -45,6 +45,40 @@ describe("convidados", () => {
 describe("identidade no jogo", () => {
   const manager = new RoomManager();
 
+  it("convidado sem nome é rejeitado ao criar sala", () => {
+    expect(() => manager.createRoom("socket-guest-empty", null)).toThrow(
+      "Informe seu nome para entrar como convidado.",
+    );
+  });
+
+  it("convidado sem nome é rejeitado ao entrar na sala", () => {
+    const { room } = manager.createRoom("socket-host-guest", null, "Host");
+    expect(() =>
+      manager.joinRoom(room.code, "socket-guest-empty", null),
+    ).toThrow("Informe seu nome para entrar como convidado.");
+  });
+
+  it("autenticado cria sala sem nickname no payload", () => {
+    const { player } = manager.createRoom("socket-auth-nonick", {
+      userId: "user-9",
+      name: "José",
+    });
+    expect(player.nickname).toBe("José");
+    expect(player.userId).toBe("user-9");
+  });
+
+  it("autenticado entra na sala sem nickname no payload", () => {
+    const { room } = manager.createRoom("socket-host-auth", {
+      userId: "user-1",
+      name: "José",
+    });
+    const { player } = manager.joinRoom(room.code, "socket-auth-nonick", {
+      userId: "user-8",
+      name: "Beatriz",
+    });
+    expect(player.nickname).toBe("Beatriz");
+  });
+
   it("usa o nome da conta para jogador autenticado", () => {
     const { player } = manager.createRoom("socket-auth", {
       userId: "user-1",
