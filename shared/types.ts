@@ -102,6 +102,10 @@ export type PlayCardsPayload = RoomPayload & {
   cardIds: string[];
   chosenColor?: CardColor;
 };
+export type RenamePlayerPayload = RoomPayload & {
+  targetPlayerId: string;
+  nickname: string;
+};
 
 export interface ClientToServerEvents {
   "create-room": (
@@ -130,6 +134,10 @@ export interface ClientToServerEvents {
   "call-uno": (payload: RoomPayload, ack: (result: Ack) => void) => void;
   "accuse-uno": (
     payload: RoomPayload & { targetPlayerId: string },
+    ack: (result: Ack) => void,
+  ) => void;
+  "rename-player": (
+    payload: RenamePlayerPayload,
     ack: (result: Ack) => void,
   ) => void;
   "restart-game": (payload: RoomPayload, ack: (result: Ack) => void) => void;

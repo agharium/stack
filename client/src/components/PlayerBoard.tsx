@@ -3,7 +3,9 @@ import type { PublicPlayer } from "../../../shared/types";
 type Props = {
   players: PublicPlayer[];
   selfId: string;
+  canRename?: boolean;
   onAccuseUno: (playerId: string) => void;
+  onRenamePlayer?: (playerId: string, currentName: string) => void;
 };
 
 function formatCardCount(player: PublicPlayer, isSelf: boolean): string {
@@ -16,7 +18,13 @@ function formatCardCount(player: PublicPlayer, isSelf: boolean): string {
   return "? cartas";
 }
 
-export function PlayerBoard({ players, selfId, onAccuseUno }: Props) {
+export function PlayerBoard({
+  players,
+  selfId,
+  canRename = false,
+  onAccuseUno,
+  onRenamePlayer,
+}: Props) {
   return (
     <section
       aria-labelledby="player-board-title"
@@ -47,6 +55,17 @@ export function PlayerBoard({ players, selfId, onAccuseUno }: Props) {
                 <span className="truncate text-sm font-black">
                   {player.nickname}
                 </span>
+                {canRename && onRenamePlayer && (
+                  <button
+                    type="button"
+                    onClick={() => onRenamePlayer(player.id, player.nickname)}
+                    title={`Renomear ${player.nickname}`}
+                    aria-label={`Renomear ${player.nickname}`}
+                    className="shrink-0 cursor-pointer rounded-md px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-indigo-200 hover:bg-white/10 hover:text-white"
+                  >
+                    Renomear
+                  </button>
+                )}
                 {isSelf && (
                   <span className="shrink-0 text-[10px] font-black text-cyan-200">
                     VOCÊ

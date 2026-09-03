@@ -10,6 +10,7 @@ import type {
   ServerToClientEvents,
 } from "../../shared/types.js";
 import { createSessionMiddleware } from "./lib/session.js";
+import { createSocketSessionMiddleware } from "./lib/socket-session.js";
 import { configureTrustProxy } from "./lib/trust-proxy.js";
 import { createApiRouter } from "./routes/api.js";
 import { RoomManager } from "./rooms/room-manager.js";
@@ -82,6 +83,7 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
 });
 
 io.engine.use(sessionMiddleware);
+io.use(createSocketSessionMiddleware(sessionMiddleware));
 
 io.use(async (socket, next) => {
   try {

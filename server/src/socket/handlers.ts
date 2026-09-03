@@ -257,6 +257,22 @@ export function registerSocketHandlers(
       }
     });
 
+    socket.on("rename-player", (payload, ack) => {
+      try {
+        const room = authorize(socket, payload.roomCode, payload.playerId);
+        manager.renamePlayer(
+          room.code,
+          payload.playerId,
+          payload.targetPlayerId,
+          payload.nickname,
+        );
+        emitState(room);
+        ack(success());
+      } catch (error) {
+        ack(failure(error));
+      }
+    });
+
     socket.on("restart-game", (payload, ack) => {
       try {
         const room = authorize(socket, payload.roomCode, payload.playerId);

@@ -31,6 +31,8 @@ describe("home autenticado x convidado", () => {
     expect(source).toContain("{!authUser && (");
     expect(source).toContain("Seu nome");
     expect(source).toContain("refreshSocketSession");
+    expect(source).toContain("autoConnect: false");
+    expect(source).toContain("GUEST_NAME_SERVER_ERROR");
     expect(source).toMatch(
       /if \(!authUser\) \{[\s\S]*Informe seu nome para jogar como convidado/,
     );

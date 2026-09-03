@@ -97,22 +97,19 @@ export class RoomManager {
       const existing = room.players.find((player) => {
         if (player.id !== requestedPlayerId || player.connected) return false;
         if (auth?.userId) return player.userId === auth.userId;
-        return (
-          player.nickname.toLocaleLowerCase() === nickname.toLocaleLowerCase()
-        );
+        // Guest reconnect by stable playerId; keep host-assigned room nickname.
+        return player.userId === null;
       });
       if (existing) {
         existing.socketId = socketId;
         existing.connected = true;
         if (auth) {
           existing.userId = auth.userId;
-          existing.nickname = auth.name;
           const gamePlayer = room.game.players.find(
             (candidate) => candidate.id === existing.id,
           );
           if (gamePlayer) {
             gamePlayer.userId = auth.userId;
-            gamePlayer.nickname = auth.name;
           }
         }
         room.game.setConnected(existing.id, true);
@@ -127,13 +124,11 @@ export class RoomManager {
       if (disconnectedSameUser) {
         disconnectedSameUser.socketId = socketId;
         disconnectedSameUser.connected = true;
-        disconnectedSameUser.nickname = auth.name;
         const gamePlayer = room.game.players.find(
           (candidate) => candidate.id === disconnectedSameUser.id,
         );
         if (gamePlayer) {
           gamePlayer.userId = auth.userId;
-          gamePlayer.nickname = auth.name;
         }
         room.game.setConnected(disconnectedSameUser.id, true);
         return { room, player: disconnectedSameUser, reconnected: true };
@@ -182,6 +177,43 @@ export class RoomManager {
     const player = room.players.find((candidate) => candidate.id === playerId);
     if (!player) throw new Error(ERRORS.notInRoom);
     return { room, player };
+  }
+
+  renamePlayer(
+    roomCode: string,
+    hostPlayerId: string,
+    targetPlayerId: string,
+    nicknameValue: string,
+  ): Room {
+    const { room, player: host } = this.requireRoomAndPlayer(
+      roomCode,
+      hostPlayerId,
+    );
+    if (room.hostId !== host.id) {
+      throw new Error(ERRORS.hostRenameOnly);
+    }
+    if (typeof nicknameValue !== "string" || !nicknameValue.trim()) {
+      throw new Error(ERRORS.nicknameEmpty);
+    }
+    const nickname = validateGuestNickname(nicknameValue);
+    const target = room.players.find((player) => player.id === targetPlayerId);
+    if (!target) throw new Error(ERRORS.playerNotFound);
+
+    const taken = room.players.some(
+      (player) =>
+        player.id !== targetPlayerId &&
+        player.nickname.toLocaleLowerCase() === nickname.toLocaleLowerCase(),
+    );
+    if (taken) throw new Error(ERRORS.nicknameTaken);
+
+    target.nickname = nickname;
+    const gamePlayer = room.game.players.find(
+      (candidate) => candidate.id === targetPlayerId,
+    );
+    if (gamePlayer) {
+      gamePlayer.nickname = nickname;
+    }
+    return room;
   }
 
   disconnect(socketId: string): Room | null {

@@ -31,22 +31,32 @@ import { RegisterPage } from "./components/RegisterPage";
 import { api, type PrivateAccount } from "./api";
 
 const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io({
-  autoConnect: true,
+  // Connect only after /api/auth/me so the first handshake already carries
+  // the session cookie when the user is logged in.
+  autoConnect: false,
   withCredentials: true,
 });
 const COLORS: CardColor[] = ["red", "yellow", "green", "blue"];
 const SESSION_KEY = "stack-session";
+const GUEST_NAME_SERVER_ERROR = "Informe seu nome para entrar como convidado.";
 
 type Session = { nickname: string; roomCode: string; playerId: string };
 type HomeScreen = "home" | "login" | "register" | "profile" | "ranking";
 
-function refreshSocketSession(): void {
-  // Login/logout happens over HTTP after the initial Socket.IO handshake.
+function refreshSocketSession(): Promise<void> {
+  // Login/logout happens over HTTP after (or before) the Socket.IO handshake.
   // Reconnect so the next handshake carries the updated session cookie.
-  if (socket.connected) {
-    socket.disconnect();
-  }
-  socket.connect();
+  return new Promise((resolve) => {
+    const finish = () => {
+      socket.off("connect", finish);
+      resolve();
+    };
+    socket.once("connect", finish);
+    if (socket.connected) {
+      socket.disconnect();
+    }
+    socket.connect();
+  });
 }
 
 function readSession(): Session | null {
@@ -107,17 +117,21 @@ export default function App() {
   useEffect(() => {
     void api
       .me()
-      .then((result) => {
+      .then(async (result) => {
         if (result.authenticated) {
           setAuthUser(result.user);
           setNickname(result.user.name);
-          refreshSocketSession();
         }
       })
       .catch(() => {
         // Guest mode remains available when auth check fails.
       })
-      .finally(() => setAuthChecked(true));
+      .finally(() => {
+        setAuthChecked(true);
+        if (!socket.connected) {
+          socket.connect();
+        }
+      });
   }, []);
 
   useEffect(() => {
@@ -166,8 +180,22 @@ export default function App() {
   const applyAuthenticatedUser = (user: PrivateAccount) => {
     setAuthUser(user);
     setNickname(user.name);
-    refreshSocketSession();
+    void refreshSocketSession();
   };
+
+  const emitCreateRoom = (
+    payload: { nickname?: string },
+  ): Promise<{ ok: true; data: { roomCode: string; playerId: string } } | { ok: false; error: string }> =>
+    new Promise((resolve) => {
+      socket.emit("create-room", payload, (result) => resolve(result));
+    });
+
+  const emitJoinRoom = (
+    payload: { roomCode: string; nickname?: string },
+  ): Promise<{ ok: true; data: { roomCode: string; playerId: string } } | { ok: false; error: string }> =>
+    new Promise((resolve) => {
+      socket.emit("join-room", payload, (result) => resolve(result));
+    });
 
   const createRoom = (event: FormEvent) => {
     event.preventDefault();
@@ -180,20 +208,34 @@ export default function App() {
       }
     }
     setBusy(true);
-    socket.emit(
-      "create-room",
-      authUser ? {} : { nickname: nickname.trim() },
-      (result) => {
-        setBusy(false);
-        if (!result.ok) return setError(result.error);
-        const publicName = authUser?.name ?? nickname.trim();
-        saveSession({
-          nickname: publicName,
-          ...result.data,
-        });
-        setError("");
-      },
-    );
+    void (async () => {
+      if (authUser && !socket.connected) {
+        await refreshSocketSession();
+      }
+      let result = await emitCreateRoom(
+        authUser ? {} : { nickname: nickname.trim() },
+      );
+      // Stale socket handshake after HTTP login: refresh once and retry.
+      if (
+        authUser &&
+        !result.ok &&
+        result.error === GUEST_NAME_SERVER_ERROR
+      ) {
+        await refreshSocketSession();
+        result = await emitCreateRoom({});
+      }
+      setBusy(false);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      const publicName = authUser?.name ?? nickname.trim();
+      saveSession({
+        nickname: publicName,
+        ...result.data,
+      });
+      setError("");
+    })();
   };
 
   const joinRoom = (event: FormEvent) => {
@@ -208,19 +250,32 @@ export default function App() {
     }
     setBusy(true);
     const code = roomCode.trim().toUpperCase();
-    socket.emit(
-      "join-room",
-      authUser
-        ? { roomCode: code }
-        : { nickname: nickname.trim(), roomCode: code },
-      (result) => {
-        setBusy(false);
-        if (!result.ok) return setError(result.error);
-        const publicName = authUser?.name ?? nickname.trim();
-        saveSession({ nickname: publicName, ...result.data });
-        setError("");
-      },
-    );
+    void (async () => {
+      if (authUser && !socket.connected) {
+        await refreshSocketSession();
+      }
+      let result = await emitJoinRoom(
+        authUser
+          ? { roomCode: code }
+          : { nickname: nickname.trim(), roomCode: code },
+      );
+      if (
+        authUser &&
+        !result.ok &&
+        result.error === GUEST_NAME_SERVER_ERROR
+      ) {
+        await refreshSocketSession();
+        result = await emitJoinRoom({ roomCode: code });
+      }
+      setBusy(false);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      const publicName = authUser?.name ?? nickname.trim();
+      saveSession({ nickname: publicName, ...result.data });
+      setError("");
+    })();
   };
 
   const logout = async () => {
@@ -230,7 +285,7 @@ export default function App() {
       // Local logout still proceeds.
     }
     setAuthUser(null);
-    refreshSocketSession();
+    void refreshSocketSession();
     leave();
   };
 
@@ -466,7 +521,29 @@ export default function App() {
   }
 
   if (state.phase === "lobby") {
-    return <Lobby state={state} error={error} busy={busy} start={() => action("start-game")} leave={leave} />;
+    return (
+      <Lobby
+        state={state}
+        error={error}
+        busy={busy}
+        start={() => action("start-game")}
+        leave={leave}
+        renamePlayer={(targetPlayerId, currentName) => {
+          if (!session) return;
+          const next = window.prompt("Novo nome do jogador", currentName);
+          if (next === null) return;
+          setBusy(true);
+          socket.emit(
+            "rename-player",
+            { ...session, targetPlayerId, nickname: next },
+            (result) => {
+              setBusy(false);
+              if (!result.ok) setError(result.error);
+            },
+          );
+        }}
+      />
+    );
   }
 
   return (
@@ -492,6 +569,20 @@ export default function App() {
           if (!result.ok) setError(result.error);
         });
       }}
+      renamePlayer={(targetPlayerId, currentName) => {
+        if (!session) return;
+        const next = window.prompt("Novo nome do jogador", currentName);
+        if (next === null) return;
+        setBusy(true);
+        socket.emit(
+          "rename-player",
+          { ...session, targetPlayerId, nickname: next },
+          (result) => {
+            setBusy(false);
+            if (!result.ok) setError(result.error);
+          },
+        );
+      }}
       restart={() => action("restart-game")}
       leave={leave}
     />
@@ -506,8 +597,20 @@ function ErrorBanner({ message }: { message: string }) {
   );
 }
 
-function Lobby({ state, error, busy, start, leave }: {
-  state: PlayerView; error: string; busy: boolean; start: () => void; leave: () => void;
+function Lobby({
+  state,
+  error,
+  busy,
+  start,
+  leave,
+  renamePlayer,
+}: {
+  state: PlayerView;
+  error: string;
+  busy: boolean;
+  start: () => void;
+  leave: () => void;
+  renamePlayer: (playerId: string, currentName: string) => void;
 }) {
   const isHost = state.selfId === state.hostId;
   return (
@@ -536,8 +639,24 @@ function Lobby({ state, error, busy, start, leave }: {
                   <span className="grid h-10 w-10 place-items-center rounded-full bg-indigo-400 text-lg font-black">
                     {player.nickname[0]?.toUpperCase()}
                   </span>
-                  <span className="font-bold">{player.nickname}</span>
-                  {player.isHost && <span className="ml-auto rounded-full bg-amber-400 px-2 py-1 text-xs font-black text-amber-950">ANFITRIÃO</span>}
+                  <span className="min-w-0 flex-1 truncate font-bold">{player.nickname}</span>
+                  {isHost && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => renamePlayer(player.id, player.nickname)}
+                      title={`Renomear ${player.nickname}`}
+                      aria-label={`Renomear ${player.nickname}`}
+                      className="shrink-0 cursor-pointer rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-indigo-100 hover:bg-white/15 disabled:opacity-50"
+                    >
+                      Renomear
+                    </button>
+                  )}
+                  {player.isHost && (
+                    <span className="shrink-0 rounded-full bg-amber-400 px-2 py-1 text-xs font-black text-amber-950">
+                      ANFITRIÃO
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
@@ -563,7 +682,9 @@ type GameProps = {
   closeWild: () => void; chooseWild: (color: CardColor) => void;
   play: (cards: Card[], drawn?: boolean) => void; draw: () => void;
   keepDrawn: () => void; accept: () => void;
-  callUno: () => void; accuseUno: (id: string) => void; restart: () => void; leave: () => void;
+  callUno: () => void; accuseUno: (id: string) => void;
+  renamePlayer: (playerId: string, currentName: string) => void;
+  restart: () => void; leave: () => void;
 };
 
 function GameTable(props: GameProps) {
@@ -682,7 +803,9 @@ function GameTable(props: GameProps) {
         <PlayerBoard
           players={state.players}
           selfId={state.selfId}
+          canRename={state.selfId === state.hostId}
           onAccuseUno={props.accuseUno}
+          onRenamePlayer={props.renamePlayer}
         />
 
         <section className="relative grid min-h-[300px] flex-1 place-items-center sm:min-h-[360px]">
