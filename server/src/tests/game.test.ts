@@ -3,7 +3,6 @@ import type { Card, CardColor } from "../../../shared/types.js";
 import { createDeck } from "../game/deck.js";
 import { Game, wrapIndex } from "../game/game.js";
 import { ERRORS } from "../messages.js";
-import { bootstrapSpy, setSpy } from "./test-helpers.js";
 
 let serial = 0;
 const number = (color: CardColor, value: number): Card => ({
@@ -29,7 +28,6 @@ function gameFor(names = ["P1", "P2", "P3"]): Game {
   );
   game.phase = "playing";
   game.matchPlayerOrder = [...names];
-  bootstrapSpy(game, names);
   game.currentPlayerIndex = 0;
   game.direction = 1;
   game.discardPile = [number("red", 5)];
@@ -294,7 +292,6 @@ describe("winning and UNO", () => {
     give(game, "P1", playable, number("blue", 4));
     game.playCard("P1", playable.id);
     expect(game.getPlayer("P1").unoDeclared).toBe(false);
-    setSpy(game, "P2");
     game.accuseUno("P2", "P1");
     expect(game.getPlayer("P1").hand).toHaveLength(3);
     expect(game.getPlayer("P1").unoDeclared).toBe(false);

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { Card, CardColor } from "../../../shared/types.js";
 import { buildMatchPlayerOrder, Game } from "../game/game.js";
 import { ERRORS } from "../messages.js";
-import { bootstrapSpy } from "./test-helpers.js";
 
 let serial = 70_000;
 const number = (color: CardColor, value: number): Card => ({
@@ -28,7 +27,6 @@ function playingGame(
   const game = new Game(players(ids), random);
   game.phase = "playing";
   game.matchPlayerOrder = [...matchOrder];
-  bootstrapSpy(game, matchOrder);
   game.currentPlayerIndex = 0;
   game.direction = 1;
   game.discardPile = [number("red", 5)];

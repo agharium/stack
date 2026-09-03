@@ -14,13 +14,13 @@ Supports multiplayer rooms with 2-12 players in the current implementation.
 - Optional accounts with profile management and global ranking
 - Guest play without registration
 - Create or join a room with a short 4-character code
-- Private hands; opponents only see exact counts if they are the current Spy
-- Always-visible player board (names, UNO signal, whose turn it is, spy marker)
+- Private hands; opponents only see exact counts at 3 cards or fewer
+- Always-visible player board (names, count visibility, UNO signal, whose turn it is)
 - Standard UNO-style 108-card deck with discard recycling
 - Custom draw-chain system (type-locked stacking plus Skip/Reverse defenses)
 - Play multiple identical cards together; effects stack
 - Immediate play of a just-drawn card, including matching copies
-- UNO declaration and Espião-only accusation (server-authoritative race)
+- UNO declaration and opponent accusation race (server-authoritative)
 - Match history / event log
 - Final ranking by remaining cards after a win
 - Completed match persistence in PostgreSQL (accounts and results only)
@@ -35,12 +35,12 @@ STACK! does not require an account to play. Accounts are optional and are used t
 **Guest**
 
 - Chooses a display name on the home screen
-- Full gameplay (create/join rooms, win, rematch, Spy, UNO)
+- Full gameplay (create/join rooms, win, rematch, UNO)
 - No persistent leaderboard identity
 
 **Registered**
 
-- Uses the public `name` from the profile in rooms and matches
+- Uses the public `name` from the profile automatically in rooms and matches
 - Completed match results count toward the global ranking
 - Can edit name, username, and password on the profile screen
 
@@ -59,7 +59,7 @@ PostgreSQL stores:
 - User accounts
 - Completed matches and per-player results
 
-PostgreSQL does **not** store active gameplay (hands, turns, draw chains, Spy rotation, UNO actions, or room state). Active rooms and matches remain in server memory.
+PostgreSQL does **not** store active gameplay (hands, turns, draw chains, UNO actions, or room state). Active rooms and matches remain in server memory.
 
 ## Ranking
 
@@ -159,7 +159,11 @@ Skip, Reverse, Draw Two, and Wild Draw Four effects apply **once per physical ca
 
 ### Drawing and immediate play
 
-On a normal turn, drawing one card does **not** always end the turn. If that specific card is playable, the player may play it immediately, keep it and end the turn, or play it together with identical copies already in hand. A grouped post-draw play must include the newly drawn card. Accepting a draw-chain penalty never offers this option.
+On a normal turn, drawing one card does **not** always end the turn. If that specific card is playable, the player may play it immediately, keep it and end the turn, or play it together with identical copies already in hand. A grouped post-draw play must include the newly drawn card.
+
+Exception: newly drawn `+2` (Draw Two) and newly drawn `+4` (Wild Draw Four) cannot be played immediately. They must stay in hand until a future turn.
+
+Accepting a draw-chain penalty never offers immediate play.
 
 ### Draw chains
 
@@ -177,9 +181,9 @@ While a chain is active, the targeted player may only:
 
 ### UNO
 
-Opponent hand sizes are normally hidden. One randomly selected **Espião** temporarily sees everyone's remaining card counts for one full table cycle. Every player becomes Espião once before the selection pool resets. Only the current Espião may accuse another player of failing to declare UNO.
+Opponent hand sizes are hidden while they have more than three cards. Once a player reaches three cards, their exact count becomes visible to everyone.
 
-When a player reaches one card, they race to declare UNO with `Tô de UNO!` before the current Espião catches them with `Não falou UNO!`. If the player declares first, they are safe. If the Espião accuses first, the player draws two cards. UNO declaration and accusation are resolved authoritatively by server processing order.
+When a player reaches one card, they race to declare UNO with `Tô de UNO!` before any opponent catches them with `Não falou UNO!`. If the player declares first, they are safe. If an opponent accuses first, the player draws two cards. UNO declaration and accusation are resolved authoritatively by server processing order.
 
 - Successful accusation (1 card, UNO not declared): target draws 2.
 - Stale accusation after UNO was declared: rejected with no penalty.
@@ -199,9 +203,9 @@ Room codes are four uppercase characters. Confusing characters like `I`, `O`, `0
 
 ## Public vs private game state
 
-**Public:** player names, whose turn it is, host/connected status, current Espião, whether a player is at UNO count (one card), game status, draw-chain info, events, and the final ranking (including card counts).
+**Public:** player names, whose turn it is, host/connected status, whether a player is at UNO count (one card), game status, draw-chain info, events, and the final ranking (including card counts). Opponent exact hand counts are public only at 3 cards or fewer.
 
-**Private:** exact opponent card counts (except for the current Espião), the actual cards in an opponent's hand, those cards' IDs, whether opponents declared UNO, usernames, and password hashes. Each client only receives its own hand.
+**Private:** exact opponent card counts above 3, the actual cards in an opponent's hand, those cards' IDs, whether opponents declared UNO, usernames, and password hashes. Each client only receives its own hand.
 
 ## In-memory limitation
 

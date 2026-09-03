@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { Card, CardColor } from "../../../shared/types.js";
 import { Game } from "../game/game.js";
 import { ERRORS } from "../messages.js";
-import { bootstrapSpy, setSpy } from "./test-helpers.js";
 
 let serial = 90_000;
 const number = (color: CardColor, value: number): Card => ({
@@ -20,7 +19,6 @@ function setup(): Game {
   );
   game.phase = "playing";
   game.matchPlayerOrder = [...ids];
-  bootstrapSpy(game, ids, "P1");
   game.currentPlayerIndex = 0;
   game.activeColor = "red";
   game.discardPile = [number("red", 5)];
@@ -34,15 +32,11 @@ function give(game: Game, playerId: string, ...cards: Card[]): void {
   game.getPlayer(playerId).hand = cards;
 }
 
-function spyView(game: Game) {
-  return game.toPlayerView("ABCD", "P1", "P1");
-}
-
-function outsiderView(game: Game, viewerId = "P2") {
+function view(game: Game, viewerId = "P2") {
   return game.toPlayerView("ABCD", "P1", viewerId);
 }
 
-describe("corrida UNO vs espião", () => {
+describe("corrida UNO sem espião", () => {
   it("jogador com exatamente 1 carta fica vulnerável ao UNO", () => {
     const game = setup();
     give(game, "P2", number("red", 1));
@@ -56,40 +50,44 @@ describe("corrida UNO vs espião", () => {
     expect(game.getPlayer("P1").unoDeclared).toBe(false);
   });
 
-  it("espião recebe canAccuseUno quando alvo está vulnerável", () => {
+  it("qualquer oponente recebe canAccuseUno quando alvo está vulnerável", () => {
     const game = setup();
     give(game, "P2", number("red", 1));
 
-    const view = spyView(game);
-    const target = view.players.find((player) => player.id === "P2");
+    const target = view(game, "P1").players.find((player) => player.id === "P2");
+    const targetFromOtherOpponent = view(game, "P3").players.find(
+      (player) => player.id === "P2",
+    );
 
     expect(target?.canAccuseUno).toBe(true);
+    expect(targetFromOtherOpponent?.canAccuseUno).toBe(true);
     expect(target?.isAtUnoCount).toBe(true);
   });
 
-  it("não-espiões não recebem canAccuseUno", () => {
+  it("jogador não recebe canAccuseUno sobre si mesmo", () => {
     const game = setup();
     give(game, "P2", number("red", 1));
 
-    const view = outsiderView(game);
-    const target = view.players.find((player) => player.id === "P2");
+    const target = view(game, "P2").players.find((player) => player.id === "P2");
 
     expect(target?.canAccuseUno).toBeUndefined();
     expect(target?.isAtUnoCount).toBe(true);
   });
 
-  it("declaração de UNO remove imediatamente a acusação do espião", () => {
+  it("declaração de UNO remove imediatamente a acusação para todos os oponentes", () => {
     const game = setup();
     give(game, "P2", number("red", 1));
 
     game.declareUno("P2");
 
-    const target = spyView(game).players.find((player) => player.id === "P2");
-    expect(target?.canAccuseUno).toBe(false);
+    const targetP1 = view(game, "P1").players.find((player) => player.id === "P2");
+    const targetP3 = view(game, "P3").players.find((player) => player.id === "P2");
+    expect(targetP1?.canAccuseUno).toBe(false);
+    expect(targetP3?.canAccuseUno).toBe(false);
     expect(game.getPlayer("P2").unoDeclared).toBe(true);
   });
 
-  it("espião não pode acusar após declaração de UNO", () => {
+  it("oponente não pode acusar após declaração de UNO", () => {
     const game = setup();
     give(game, "P2", number("red", 1));
     game.declareUno("P2");
@@ -101,7 +99,7 @@ describe("corrida UNO vs espião", () => {
     expect(game.getPlayer("P1").hand).toHaveLength(0);
   });
 
-  it("acusação obsoleta após UNO não pune o espião", () => {
+  it("acusação obsoleta após UNO não pune o acusador", () => {
     const game = setup();
     give(game, "P2", number("red", 1));
     game.declareUno("P2");
@@ -112,7 +110,7 @@ describe("corrida UNO vs espião", () => {
     expect(game.getPlayer("P1").hand).toHaveLength(0);
   });
 
-  it("espião acusa antes da declaração e alvo compra 2", () => {
+  it("oponente acusa antes da declaração e alvo compra 2", () => {
     const game = setup();
     give(game, "P2", number("red", 1));
 
@@ -122,15 +120,17 @@ describe("corrida UNO vs espião", () => {
     expect(game.getPlayer("P2").unoDeclared).toBe(false);
   });
 
-  it("acusação bem-sucedida remove vulnerabilidade UNO", () => {
+  it("acusação bem-sucedida remove vulnerabilidade UNO para todos", () => {
     const game = setup();
     give(game, "P2", number("red", 1));
 
     game.accuseUno("P1", "P2");
 
-    const target = spyView(game).players.find((player) => player.id === "P2");
-    expect(target?.canAccuseUno).toBe(false);
-    expect(target?.isAtUnoCount).toBe(false);
+    const targetP1 = view(game, "P1").players.find((player) => player.id === "P2");
+    const targetP3 = view(game, "P3").players.find((player) => player.id === "P2");
+    expect(targetP1?.canAccuseUno).toBe(false);
+    expect(targetP3?.canAccuseUno).toBe(false);
+    expect(targetP1?.isAtUnoCount).toBe(false);
   });
 
   it("declaração após acusação bem-sucedida é rejeitada sem efeito", () => {
@@ -170,12 +170,13 @@ describe("corrida UNO vs espião", () => {
     expect(game.drawChain).toEqual(chain);
   });
 
-  it("apenas o espião atual pode acusar", () => {
+  it("acusação não depende da vez atual", () => {
     const game = setup();
     give(game, "P2", number("red", 1));
-    setSpy(game, "P3");
-
-    expect(() => game.accuseUno("P1", "P2")).toThrow(ERRORS.spyOnlyAccuse);
+    game.currentPlayerIndex = 1;
+    expect(game.currentPlayer.id).toBe("P2");
+    game.accuseUno("P3", "P2");
+    expect(game.getPlayer("P2").hand).toHaveLength(3);
   });
 
   it("não vaza unoDeclared na serialização", () => {
@@ -183,34 +184,34 @@ describe("corrida UNO vs espião", () => {
     give(game, "P2", number("red", 1));
     game.declareUno("P2");
 
-    const serialized = JSON.stringify(spyView(game));
+    const serialized = JSON.stringify(view(game, "P1"));
     expect(serialized).not.toContain("unoDeclared");
   });
 
-  it("serialização do espião atualiza após declaração", () => {
+  it("serialização dos oponentes atualiza após declaração", () => {
     const game = setup();
     give(game, "P2", number("red", 1));
     expect(
-      spyView(game).players.find((player) => player.id === "P2")?.canAccuseUno,
+      view(game, "P1").players.find((player) => player.id === "P2")?.canAccuseUno,
     ).toBe(true);
 
     game.declareUno("P2");
 
     expect(
-      spyView(game).players.find((player) => player.id === "P2")?.canAccuseUno,
+      view(game, "P1").players.find((player) => player.id === "P2")?.canAccuseUno,
     ).toBe(false);
   });
 
-  it("serialização do espião atualiza após acusação", () => {
+  it("serialização dos oponentes atualiza após acusação", () => {
     const game = setup();
     give(game, "P2", number("red", 1));
     game.accuseUno("P1", "P2");
 
     expect(
-      spyView(game).players.find((player) => player.id === "P2")?.canAccuseUno,
+      view(game, "P1").players.find((player) => player.id === "P2")?.canAccuseUno,
     ).toBe(false);
     expect(
-      spyView(game).players.find((player) => player.id === "P2")?.cardCount,
+      view(game, "P1").players.find((player) => player.id === "P2")?.cardCount,
     ).toBe(3);
   });
 

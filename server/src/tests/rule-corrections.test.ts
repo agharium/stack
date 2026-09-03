@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { Card, CardColor } from "../../../shared/types.js";
 import { Game } from "../game/game.js";
 import { ERRORS } from "../messages.js";
-import { bootstrapSpy } from "./test-helpers.js";
 
 let serial = 40_000;
 const number = (color: CardColor, value: number): Card => ({
@@ -24,7 +23,6 @@ function setup(): Game {
   );
   game.phase = "playing";
   game.matchPlayerOrder = ["P1", "P2", "P3"];
-  bootstrapSpy(game, ["P1", "P2", "P3"]);
   game.discardPile = [number("green", 9)];
   game.activeColor = "green";
   game.drawPile = Array.from({ length: 40 }, (_, value) =>
@@ -146,7 +144,7 @@ describe("jogada agrupada após comprar", () => {
 });
 
 describe("declaração e acusação de UNO", () => {
-  it("expõe contagens ao espião sem expor cartas adversárias", () => {
+  it("expõe contagem pública apenas até 3 cartas sem expor cartas adversárias", () => {
     const game = setup();
     give(game, "P1", number("red", 1));
     give(game, "P2", number("blue", 2), number("yellow", 3));
@@ -163,7 +161,7 @@ describe("declaração e acusação de UNO", () => {
     const outsider = game.toPlayerView("ABCD", "P1", "P2");
     expect(
       outsider.players.find((player) => player.id === "P1")?.cardCount,
-    ).toBeNull();
+    ).toBe(1);
     expect(
       outsider.players.find((player) => player.id === "P2")?.cardCount,
     ).toBe(2);
@@ -353,26 +351,21 @@ describe("fim de partida e reinício explícito", () => {
     );
   });
 
-  it("estado público oculta contagem de adversários para não-espiões", () => {
+  it("estado público oculta contagem acima de 3 cartas", () => {
     const game = new Game([
       { id: "P1", nickname: "P1" },
       { id: "P2", nickname: "P2" },
     ]);
     game.start();
-    const spyId = game.spy.currentPlayerId!;
-    const spyView = game.toPlayerView("ABCD", "P1", spyId);
-    const outsiderId = spyId === "P1" ? "P2" : "P1";
-    const outsiderView = game.toPlayerView("ABCD", "P1", outsiderId);
-    const opponentFromSpy = spyView.players.find(
-      (player) => player.id !== spyId,
-    );
-    const opponentFromOutsider = outsiderView.players.find(
-      (player) => player.id !== outsiderId,
-    );
+    const p1 = game.getPlayer("P1");
+    const p2 = game.getPlayer("P2");
+    p1.hand = [number("red", 1), number("red", 2), number("red", 3), number("red", 4)];
+    p2.hand = [number("blue", 1), number("blue", 2), number("blue", 3)];
+    const p1View = game.toPlayerView("ABCD", "P1", "P1");
+    const p2View = game.toPlayerView("ABCD", "P1", "P2");
 
-    expect(opponentFromSpy?.cardCount).toBe(7);
-    expect(opponentFromOutsider?.cardCount).toBeNull();
-    expect(opponentFromOutsider?.isAtUnoCount).toBe(false);
+    expect(p1View.players.find((player) => player.id === "P2")?.cardCount).toBe(3);
+    expect(p2View.players.find((player) => player.id === "P1")?.cardCount).toBeNull();
   });
 
   it("somente restart explícito cria uma rodada nova com estado limpo", () => {

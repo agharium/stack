@@ -44,15 +44,6 @@ export function PlayerBoard({ players, selfId, onAccuseUno }: Props) {
               ].join(" ")}
             >
               <div className="flex min-w-0 items-center gap-1.5">
-                {player.isSpy && (
-                  <span
-                    aria-label="Este jogador é o espião atual."
-                    title="Espião"
-                    className="shrink-0 text-sm"
-                  >
-                    🕵️
-                  </span>
-                )}
                 <span className="truncate text-sm font-black">
                   {player.nickname}
                 </span>

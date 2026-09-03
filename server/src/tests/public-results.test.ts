@@ -3,7 +3,6 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Card, CardColor } from "../../../shared/types.js";
 import { Game } from "../game/game.js";
-import { bootstrapSpy } from "./test-helpers.js";
 
 let serial = 50_000;
 const number = (color: CardColor, value: number): Card => ({
@@ -23,7 +22,6 @@ function setup(): Game {
   );
   game.phase = "playing";
   game.matchPlayerOrder = ["P1", "P2", "P3", "P4"];
-  bootstrapSpy(game, ["P1", "P2", "P3", "P4"]);
   game.currentPlayerIndex = 0;
   game.activeColor = "green";
   game.discardPile = [number("green", 9)];
@@ -40,7 +38,7 @@ function cards(count: number, color: CardColor = "red"): Card[] {
 }
 
 describe("estado público dos jogadores", () => {
-  it("inclui contagem exata e jogador da vez para todos", () => {
+  it("local vê própria contagem e oponentes só até 3 cartas", () => {
     const game = setup();
     game.getPlayer("P1").hand = cards(4);
     game.getPlayer("P2").hand = cards(1);
@@ -50,7 +48,7 @@ describe("estado público dos jogadores", () => {
     const view = game.toPlayerView("ABCD", "P1", "P1");
 
     expect(view.players.map((player) => player.cardCount)).toEqual([
-      4, 1, 7, 3,
+      4, 1, null, 3,
     ]);
     expect(
       view.players.filter((player) => player.isCurrentTurn).map((p) => p.id),
@@ -67,8 +65,22 @@ describe("estado público dos jogadores", () => {
       null,
       1,
       null,
-      null,
+      3,
     ]);
+  });
+
+  it("mostra null para oponente com 4+ e número exato para 3 ou menos", () => {
+    const game = setup();
+    game.getPlayer("P1").hand = cards(8);
+    game.getPlayer("P2").hand = cards(4);
+    game.getPlayer("P3").hand = cards(3);
+    game.getPlayer("P4").hand = cards(2);
+
+    const view = game.toPlayerView("ABCD", "P1", "P1");
+    expect(view.players.find((player) => player.id === "P2")?.cardCount).toBeNull();
+    expect(view.players.find((player) => player.id === "P3")?.cardCount).toBe(3);
+    expect(view.players.find((player) => player.id === "P4")?.cardCount).toBe(2);
+    expect(view.players.find((player) => player.id === "P1")?.cardCount).toBe(8);
   });
 
   it("não serializa cartas nem IDs da mão dos adversários", () => {
@@ -83,6 +95,8 @@ describe("estado público dos jogadores", () => {
 
     expect(serialized).not.toContain("ID-SECRETO-ADVERSARIO");
     expect(serialized).not.toContain('"value":8');
+    expect(serialized).not.toContain('"cardCount":7');
+    expect(serialized).not.toContain("unoDeclared");
   });
 });
 
@@ -169,6 +183,8 @@ describe("responsividade do placar público", () => {
     );
 
     expect(source).toContain("grid grid-cols-2");
+    expect(source).toContain("? cartas");
+    expect(source).toContain('player.cardCount === 1 ? "carta" : "cartas"');
     expect(source).not.toMatch(/hidden[^"]*PlayerBoard|PlayerBoard[^"]*hidden/);
   });
 });

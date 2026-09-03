@@ -32,8 +32,6 @@ export const ERRORS = {
   unoAlreadyDeclaredByTarget: "Esse jogador já declarou UNO.",
   targetNoLongerAtUnoCount: "Esse jogador não está mais com uma carta.",
   catchSelf: "Você não pode denunciar a si mesmo.",
-  spyOnlyAccuse:
-    "Apenas o espião pode acusar outro jogador de não ter falado UNO.",
   disconnected: "Você está desconectado.",
   gameNotStarted: "A partida ainda não começou.",
   gameFinished: "A partida já terminou.",

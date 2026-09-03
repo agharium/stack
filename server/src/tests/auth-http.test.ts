@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { createTestApp } from "./test-app.js";
@@ -17,5 +19,16 @@ describe("API ranking", () => {
     const response = await request(app).get("/api/ranking");
     expect([200, 503]).toContain(response.status);
     expect(response.body).toHaveProperty("ranking");
+  });
+});
+
+describe("home autenticado x convidado", () => {
+  it("input de nome de jogo aparece somente para convidados", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "../client/src/App.tsx"),
+      "utf8",
+    );
+    expect(source).toContain("{!authUser && (");
+    expect(source).toContain("Seu nome");
   });
 });

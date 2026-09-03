@@ -15,12 +15,6 @@ import {
 import { ERRORS, chainColorMismatch } from "../messages.js";
 import { randomUUID } from "node:crypto";
 import { createDeck, shuffle } from "./deck.js";
-import {
-  buildSpyQueue,
-  createEmptySpyState,
-  pickNextSpyFromQueue,
-  type SpyState,
-} from "./spy.js";
 
 export type GamePhase = "lobby" | "playing" | "finished";
 export type GamePlayer = {
@@ -78,8 +72,6 @@ export class Game {
   startedAt: Date | null = null;
   events: GameEvent[] = [];
   lastPlayerId: string | null = null;
-  spy: SpyState = createEmptySpyState();
-  private servedAsSpyThisCycle = new Set<string>();
 
   constructor(
     players: Array<{
@@ -127,7 +119,6 @@ export class Game {
     this.discardPile = [];
     this.matchPlayerOrder = buildMatchPlayerOrder(this.players, this.random);
     this.currentPlayerIndex = 0;
-    this.initSpy();
 
     for (let round = 0; round < 7; round += 1) {
       for (const playerId of this.matchPlayerOrder) {
@@ -202,100 +193,6 @@ export class Game {
       this.lastPlayerId = this.currentPlayer.id;
     }
     this.currentPlayerIndex = this.getPlayerIndexOffset(offset);
-    this.onTurnResolved();
-  }
-
-  private onTurnResolved(): void {
-    if (this.phase !== "playing" || !this.spy.currentPlayerId) return;
-    this.spy.remainingTurns -= 1;
-    if (this.spy.remainingTurns <= 0) {
-      this.promoteNextSpy();
-    }
-  }
-
-  private initSpy(): void {
-    this.spy = createEmptySpyState();
-    this.servedAsSpyThisCycle.clear();
-    this.ensureSpyQueue();
-    this.promoteNextSpy();
-  }
-
-  private connectedMatchPlayerIds(): string[] {
-    return this.matchPlayerOrder.filter((playerId) =>
-      this.getPlayer(playerId).connected,
-    );
-  }
-
-  private ensureSpyQueue(): void {
-    if (this.spy.selectionQueue.length > 0) return;
-    const connected = this.connectedMatchPlayerIds();
-    if (connected.length === 0) return;
-
-    const unserved = connected.filter(
-      (playerId) => !this.servedAsSpyThisCycle.has(playerId),
-    );
-    const pool = unserved.length > 0 ? unserved : connected;
-    if (unserved.length === 0) {
-      this.servedAsSpyThisCycle.clear();
-    }
-    this.spy.selectionQueue = buildSpyQueue(pool, this.random);
-  }
-
-  private promoteNextSpy(): void {
-    if (this.phase !== "playing") return;
-
-    if (this.spy.currentPlayerId) {
-      this.servedAsSpyThisCycle.add(this.spy.currentPlayerId);
-    }
-
-    this.ensureSpyQueue();
-    const picked = pickNextSpyFromQueue(
-      this.spy.selectionQueue,
-      (playerId) => this.getPlayer(playerId).connected,
-    );
-    this.spy.selectionQueue = picked.queue;
-
-    if (!picked.nextId) {
-      this.ensureSpyQueue();
-      const retry = pickNextSpyFromQueue(
-        this.spy.selectionQueue,
-        (playerId) => this.getPlayer(playerId).connected,
-      );
-      this.spy.selectionQueue = retry.queue;
-      if (!retry.nextId) {
-        this.spy.currentPlayerId = null;
-        this.spy.remainingTurns = 0;
-        return;
-      }
-      this.activateSpy(retry.nextId);
-      return;
-    }
-
-    this.activateSpy(picked.nextId);
-  }
-
-  private activateSpy(playerId: string): void {
-    this.spy.currentPlayerId = playerId;
-    this.spy.remainingTurns = this.connectedMatchPlayerCount();
-    this.addEvent(
-      `Novo espião: ${this.getPlayer(playerId).nickname} 🕵️`,
-    );
-  }
-
-  private handleSpyDisconnect(playerId: string): void {
-    if (this.spy.currentPlayerId !== playerId) return;
-    this.servedAsSpyThisCycle.add(playerId);
-    this.spy.currentPlayerId = null;
-    this.spy.remainingTurns = 0;
-    this.promoteNextSpy();
-  }
-
-  private handleSpyReconnect(playerId: string): void {
-    if (this.phase !== "playing") return;
-    if (this.servedAsSpyThisCycle.has(playerId)) return;
-    if (this.spy.currentPlayerId === playerId) return;
-    if (this.spy.selectionQueue.includes(playerId)) return;
-    this.spy.selectionQueue.push(playerId);
   }
 
   private getNextPlayerId(): string | null {
@@ -347,6 +244,13 @@ export class Game {
     return card.color === this.activeColor || sameFace(card, top)
       ? { valid: true }
       : { valid: false, error: ERRORS.cardNotPlayable };
+  }
+
+  private canPlayImmediatelyAfterDraw(card: Card): boolean {
+    if (card.kind === "draw-two" || card.kind === "wild-draw-four") {
+      return false;
+    }
+    return this.canPlayCard(card).valid;
   }
 
   playCard(
@@ -523,7 +427,7 @@ export class Game {
     this.currentPlayer.unoDeclared = false;
     this.currentPlayer.hand.push(card);
     this.addEvent(`${this.currentPlayer.nickname} comprou uma carta.`);
-    if (this.canPlayCard(card).valid) {
+    if (this.canPlayImmediatelyAfterDraw(card)) {
       this.pendingDrawPlay = { playerId, cardId: card.id };
     } else {
       this.advanceTurn();
@@ -604,9 +508,6 @@ export class Game {
     if (this.phase === "finished") throw new Error(ERRORS.gameFinished);
     if (this.phase !== "playing") throw new Error(ERRORS.gameNotStarted);
     if (accuserId === targetId) throw new Error(ERRORS.catchSelf);
-    if (accuserId !== this.spy.currentPlayerId) {
-      throw new Error(ERRORS.spyOnlyAccuse);
-    }
     const accuser = this.getPlayer(accuserId);
     const target = this.getPlayer(targetId);
     if (!accuser.connected) throw new Error(ERRORS.disconnected);
@@ -660,11 +561,6 @@ export class Game {
   setConnected(playerId: string, connected: boolean): void {
     const player = this.getPlayer(playerId);
     player.connected = connected;
-    if (connected) {
-      this.handleSpyReconnect(playerId);
-    } else if (this.phase === "playing") {
-      this.handleSpyDisconnect(playerId);
-    }
     if (
       !connected &&
       this.phase === "playing" &&
@@ -689,8 +585,6 @@ export class Game {
     const nextPlayerId = this.getNextPlayerId();
     const previousPlayerId =
       this.phase === "playing" ? this.lastPlayerId : null;
-    const viewerIsSpy = playerId === this.spy.currentPlayerId;
-    const revealAllCounts = this.phase === "finished";
     return {
       roomCode,
       phase: this.phase,
@@ -701,28 +595,24 @@ export class Game {
       players: displayOrder.map((id) => {
         const player = this.getPlayer(id);
         const isSelf = player.id === playerId;
-        const canSeeCount =
-          this.phase === "lobby" ||
-          isSelf ||
-          viewerIsSpy ||
-          revealAllCounts;
         const playerView: PublicPlayer = {
           id: player.id,
           nickname: player.nickname,
           connected: player.connected,
           isHost: player.id === hostId,
-          cardCount: canSeeCount ? player.hand.length : null,
+          cardCount: isSelf
+            ? player.hand.length
+            : player.hand.length <= 3
+              ? player.hand.length
+              : null,
           isAtUnoCount:
             this.phase === "playing" && player.hand.length === 1,
           isCurrentTurn:
             this.phase === "playing" && player.id === this.currentPlayer.id,
           isPreviousTurn: previousPlayerId === player.id,
           isNextTurn: nextPlayerId === player.id,
-          isSpy:
-            this.phase === "playing" &&
-            player.id === this.spy.currentPlayerId,
         };
-        if (viewerIsSpy && this.phase === "playing" && !isSelf) {
+        if (this.phase === "playing" && !isSelf) {
           playerView.canAccuseUno = this.isUnoVulnerable(player);
         }
         return playerView;
@@ -755,12 +645,6 @@ export class Game {
           }
         : null,
       events: this.events.slice(-8),
-      currentSpyPlayerId:
-        this.phase === "playing" ? this.spy.currentPlayerId : null,
-      spyRemainingTurns:
-        this.phase === "playing" && viewerIsSpy
-          ? this.spy.remainingTurns
-          : null,
     };
   }
 

@@ -54,6 +54,15 @@ describe("identidade no jogo", () => {
     expect(player.userId).toBe("user-1");
   });
 
+  it("ignora nickname enviado pelo autenticado ao criar sala", () => {
+    const { player } = manager.createRoom(
+      "socket-auth-2",
+      { userId: "user-2", name: "Maria" },
+      "Nome Forjado",
+    );
+    expect(player.nickname).toBe("Maria");
+  });
+
   it("não permite o mesmo usuário autenticado duas vezes na sala", () => {
     const { room } = manager.createRoom("socket-a", {
       userId: "user-1",
@@ -75,6 +84,20 @@ describe("identidade no jogo", () => {
     const { player } = manager.joinRoom(room.code, "socket-guest", null, "Ana");
     expect(player.userId).toBeNull();
     expect(room.players).toHaveLength(2);
+  });
+
+  it("ignora nickname enviado pelo autenticado ao entrar na sala", () => {
+    const { room } = manager.createRoom("socket-host-2", {
+      userId: "user-1",
+      name: "José",
+    });
+    const { player } = manager.joinRoom(
+      room.code,
+      "socket-auth-join",
+      { userId: "user-3", name: "Clara" },
+      "Outro Nome",
+    );
+    expect(player.nickname).toBe("Clara");
   });
 
   it("não expõe username no estado público da sala", () => {

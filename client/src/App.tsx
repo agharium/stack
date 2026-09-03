@@ -761,21 +761,6 @@ function GameTable(props: GameProps) {
               </button>
             )}
           </div>
-          {state.phase === "playing" &&
-            state.currentSpyPlayerId === state.selfId && (
-              <p className="mb-3 px-1 text-sm font-bold text-violet-200">
-                🕵️ Você é o espião
-                {state.spyRemainingTurns !== null && (
-                  <span className="text-white/60">
-                    {" "}
-                    · {state.spyRemainingTurns}{" "}
-                    {state.spyRemainingTurns === 1
-                      ? "turno restante"
-                      : "turnos restantes"}
-                  </span>
-                )}
-              </p>
-            )}
           <div className="grid grid-cols-1 gap-3 min-[430px]:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
             {handGroups.map((group) => (
               <section

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { Card, CardColor } from "../../../shared/types.js";
 import { Game } from "../game/game.js";
 import { ERRORS } from "../messages.js";
-import { bootstrapSpy, setSpy } from "./test-helpers.js";
 
 let serial = 10_000;
 const number = (color: CardColor, value: number): Card => ({
@@ -28,7 +27,6 @@ function setup(names = ["P1", "P2", "P3", "P4"]): Game {
   );
   game.phase = "playing";
   game.matchPlayerOrder = [...names];
-  bootstrapSpy(game, names);
   game.discardPile = [number("green", 9)];
   game.activeColor = "green";
   game.currentPlayerIndex = 0;
@@ -328,15 +326,58 @@ describe("playing the just-drawn card", () => {
     expect(game.currentPlayer.id).toBe("P4");
   });
 
-  it("starts a chain with a drawn Draw Two", () => {
+  it("não permite jogar +2 recém-comprado e encerra o turno", () => {
     const game = setup();
     const drawn = action("green", "draw-two");
     give(game, "P1", number("red", 1));
     game.drawPile = [drawn];
     game.drawOneCard("P1");
-    game.playDrawnCard("P1");
-    expect(game.drawChain?.amount).toBe(2);
+    expect(game.pendingDrawPlay).toBeNull();
+    expect(game.getPlayer("P1").hand).toContainEqual(drawn);
+    expect(() => game.playDrawnCard("P1")).toThrow(ERRORS.noPendingDrawnPlay);
     expect(game.currentPlayer.id).toBe("P2");
+  });
+
+  it("não permite jogar +4 recém-comprado e encerra o turno", () => {
+    const game = setup();
+    const drawn = wild("wild-draw-four");
+    give(game, "P1", number("red", 1));
+    game.drawPile = [drawn];
+    game.drawOneCard("P1");
+    expect(game.pendingDrawPlay).toBeNull();
+    expect(game.getPlayer("P1").hand).toContainEqual(drawn);
+    expect(() => game.playDrawnCard("P1", "blue")).toThrow(
+      ERRORS.noPendingDrawnPlay,
+    );
+    expect(game.currentPlayer.id).toBe("P2");
+  });
+
+  it("não abre jogada agrupada quando +2 recém-comprado tem cópia na mão", () => {
+    const game = setup();
+    const old = action("green", "draw-two");
+    const drawn = action("green", "draw-two");
+    give(game, "P1", old, number("red", 1));
+    game.drawPile = [drawn];
+    game.drawOneCard("P1");
+    expect(game.pendingDrawPlay).toBeNull();
+    expect(game.currentPlayer.id).toBe("P2");
+    expect(() => game.playDrawnCards("P1", [drawn.id, old.id])).toThrow(
+      ERRORS.notYourTurn,
+    );
+  });
+
+  it("não abre jogada agrupada quando +4 recém-comprado tem cópia na mão", () => {
+    const game = setup();
+    const old = wild("wild-draw-four");
+    const drawn = wild("wild-draw-four");
+    give(game, "P1", old, number("red", 1));
+    game.drawPile = [drawn];
+    game.drawOneCard("P1");
+    expect(game.pendingDrawPlay).toBeNull();
+    expect(game.currentPlayer.id).toBe("P2");
+    expect(() => game.playDrawnCards("P1", [drawn.id, old.id], "blue")).toThrow(
+      ERRORS.notYourTurn,
+    );
   });
 
   it("requires a color before resolving a drawn Wild", () => {
@@ -387,7 +428,6 @@ describe("playing the just-drawn card", () => {
     give(game, "P2", number("red", 4));
     game.drawPile = [number("blue", 8), number("red", 6), drawn];
     game.drawOneCard("P1");
-    setSpy(game, "P3");
     game.accuseUno("P3", "P2");
     expect(game.pendingDrawPlay?.cardId).toBe(drawn.id);
     expect(() => game.drawOneCard("P1")).toThrow(

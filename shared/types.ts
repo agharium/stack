@@ -35,7 +35,6 @@ export type PublicPlayer = {
   isCurrentTurn: boolean;
   isPreviousTurn: boolean;
   isNextTurn: boolean;
-  isSpy: boolean;
 };
 
 export type FinalStanding = {
@@ -86,8 +85,6 @@ export type PlayerView = {
   winnerId: string | null;
   result: PublicGameResult | null;
   events: GameEvent[];
-  currentSpyPlayerId: string | null;
-  spyRemainingTurns: number | null;
 };
 
 export type Ack<T = undefined> =
