@@ -55,15 +55,26 @@ export function PlayerBoard({
                 <span className="truncate text-sm font-black">
                   {player.nickname}
                 </span>
-                {canRename && onRenamePlayer && (
+                {canRename && !isSelf && onRenamePlayer && (
                   <button
                     type="button"
                     onClick={() => onRenamePlayer(player.id, player.nickname)}
                     title={`Renomear ${player.nickname}`}
                     aria-label={`Renomear ${player.nickname}`}
-                    className="shrink-0 cursor-pointer rounded-md px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-indigo-200 hover:bg-white/10 hover:text-white"
+                    className="grid h-6 w-6 shrink-0 cursor-pointer place-items-center rounded-full text-indigo-200 hover:bg-white/10 hover:text-white"
                   >
-                    Renomear
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 20 20"
+                      className="h-3.5 w-3.5 fill-none stroke-current"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M3.5 14.5 5 16l9.5-9.5L13 5 3.5 14.5Z" />
+                      <path d="m12.2 5.8 2 2" />
+                      <path d="M3 17h4" />
+                    </svg>
                   </button>
                 )}
                 {isSelf && (

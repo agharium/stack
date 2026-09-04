@@ -597,6 +597,23 @@ function ErrorBanner({ message }: { message: string }) {
   );
 }
 
+function RenameIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      className="h-3.5 w-3.5 fill-none stroke-current"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3.5 14.5 5 16l9.5-9.5L13 5 3.5 14.5Z" />
+      <path d="m12.2 5.8 2 2" />
+      <path d="M3 17h4" />
+    </svg>
+  );
+}
+
 function Lobby({
   state,
   error,
@@ -640,16 +657,16 @@ function Lobby({
                     {player.nickname[0]?.toUpperCase()}
                   </span>
                   <span className="min-w-0 flex-1 truncate font-bold">{player.nickname}</span>
-                  {isHost && (
+                  {isHost && player.id !== state.selfId && (
                     <button
                       type="button"
                       disabled={busy}
                       onClick={() => renamePlayer(player.id, player.nickname)}
                       title={`Renomear ${player.nickname}`}
                       aria-label={`Renomear ${player.nickname}`}
-                      className="shrink-0 cursor-pointer rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-indigo-100 hover:bg-white/15 disabled:opacity-50"
+                      className="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-full border border-white/15 bg-white/10 text-indigo-100 hover:bg-white/15 hover:text-white disabled:opacity-50"
                     >
-                      Renomear
+                      <RenameIcon />
                     </button>
                   )}
                   {player.isHost && (
