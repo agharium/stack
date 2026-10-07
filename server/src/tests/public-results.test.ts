@@ -38,7 +38,7 @@ function cards(count: number, color: CardColor = "red"): Card[] {
 }
 
 describe("estado público dos jogadores", () => {
-  it("local vê própria contagem e oponentes só até 3 cartas", () => {
+  it("local vê própria contagem e oponentes só com 4+ cartas", () => {
     const game = setup();
     game.getPlayer("P1").hand = cards(4);
     game.getPlayer("P2").hand = cards(1);
@@ -48,7 +48,7 @@ describe("estado público dos jogadores", () => {
     const view = game.toPlayerView("ABCD", "P1", "P1");
 
     expect(view.players.map((player) => player.cardCount)).toEqual([
-      4, 1, null, 3,
+      4, null, 7, null,
     ]);
     expect(
       view.players.filter((player) => player.isCurrentTurn).map((p) => p.id),
@@ -62,14 +62,14 @@ describe("estado público dos jogadores", () => {
 
     const outsider = game.toPlayerView("ABCD", "P1", "P2");
     expect(outsider.players.map((player) => player.cardCount)).toEqual([
-      null,
+      4,
       1,
+      7,
       null,
-      3,
     ]);
   });
 
-  it("mostra null para oponente com 4+ e número exato para 3 ou menos", () => {
+  it("mostra número exato para oponente com 4+ e null para menos que 4", () => {
     const game = setup();
     game.getPlayer("P1").hand = cards(8);
     game.getPlayer("P2").hand = cards(4);
@@ -77,9 +77,9 @@ describe("estado público dos jogadores", () => {
     game.getPlayer("P4").hand = cards(2);
 
     const view = game.toPlayerView("ABCD", "P1", "P1");
-    expect(view.players.find((player) => player.id === "P2")?.cardCount).toBeNull();
-    expect(view.players.find((player) => player.id === "P3")?.cardCount).toBe(3);
-    expect(view.players.find((player) => player.id === "P4")?.cardCount).toBe(2);
+    expect(view.players.find((player) => player.id === "P2")?.cardCount).toBe(4);
+    expect(view.players.find((player) => player.id === "P3")?.cardCount).toBeNull();
+    expect(view.players.find((player) => player.id === "P4")?.cardCount).toBeNull();
     expect(view.players.find((player) => player.id === "P1")?.cardCount).toBe(8);
   });
 
@@ -95,7 +95,7 @@ describe("estado público dos jogadores", () => {
 
     expect(serialized).not.toContain("ID-SECRETO-ADVERSARIO");
     expect(serialized).not.toContain('"value":8');
-    expect(serialized).not.toContain('"cardCount":7');
+    expect(serialized).not.toContain('"cardCount":1');
     expect(serialized).not.toContain("unoDeclared");
   });
 });

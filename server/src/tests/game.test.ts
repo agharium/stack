@@ -375,7 +375,7 @@ describe("restart and private views", () => {
     give(game, "P2", secret);
     const view = game.toPlayerView("ABCD", "P1", "P1");
     expect(view.hand).toEqual([own]);
-    expect(view.players.find((player) => player.id === "P2")?.cardCount).toBe(1);
+    expect(view.players.find((player) => player.id === "P2")?.cardCount).toBeNull();
     expect(JSON.stringify(view)).not.toContain("OPPONENT-SECRET-CARD");
   });
 });

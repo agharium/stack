@@ -602,7 +602,7 @@ export class Game {
           isHost: player.id === hostId,
           cardCount: isSelf
             ? player.hand.length
-            : player.hand.length <= 3
+            : player.hand.length >= 4
               ? player.hand.length
               : null,
           isAtUnoCount:

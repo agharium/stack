@@ -14,7 +14,7 @@ Supports multiplayer rooms with 2-12 players in the current implementation.
 - Optional accounts with profile management and global ranking
 - Guest play without registration
 - Create or join a room with a short 4-character code
-- Private hands; opponents only see exact counts at 3 cards or fewer
+- Private hands; opponents only see exact counts at 4 cards or more
 - Always-visible player board (names, count visibility, UNO signal, whose turn it is)
 - Standard UNO-style 108-card deck with discard recycling
 - Custom draw-chain system (type-locked stacking plus Skip/Reverse defenses)
@@ -65,9 +65,9 @@ PostgreSQL does **not** store active gameplay (hands, turns, draw chains, UNO ac
 
 The global leaderboard is based only on match victories. Every authenticated match win counts as one victory. Other finishing positions do not award points.
 
-- **VitÛrias** ó primary ranking value (descending)
-- **Partidas** ó games played (informational; fewer games is only a tie-breaker)
-- **Taxa de vitÛria** ó informational only; does not affect order
+- **Vitùrias** ù primary ranking value (descending)
+- **Partidas** ù games played (informational; fewer games is only a tie-breaker)
+- **Taxa de vitùria** ù informational only; does not affect order
 
 Only results linked to a registered account count toward the leaderboard. Guest results are saved for match history integrity but excluded from aggregation.
 
@@ -181,9 +181,9 @@ While a chain is active, the targeted player may only:
 
 ### UNO
 
-Opponent hand sizes are hidden while they have more than three cards. Once a player reaches three cards, their exact count becomes visible to everyone.
+Opponent hand sizes are visible while they have four or more cards. Once a player drops below four cards, their exact count is hidden (`? cartas`) so the table cannot easily telegraph an approaching UNO.
 
-When a player reaches one card, they race to declare UNO with `TÙ de UNO!` before any opponent catches them with `N„o falou UNO!`. If the player declares first, they are safe. If an opponent accuses first, the player draws two cards. UNO declaration and accusation are resolved authoritatively by server processing order.
+When a player reaches one card, they race to declare UNO with `Tù de UNO!` before any opponent catches them with `Nùo falou UNO!`. If the player declares first, they are safe. If an opponent accuses first, the player draws two cards. UNO declaration and accusation are resolved authoritatively by server processing order.
 
 - Successful accusation (1 card, UNO not declared): target draws 2.
 - Stale accusation after UNO was declared: rejected with no penalty.
@@ -203,9 +203,9 @@ Room codes are four uppercase characters. Confusing characters like `I`, `O`, `0
 
 ## Public vs private game state
 
-**Public:** player names, whose turn it is, host/connected status, whether a player is at UNO count (one card), game status, draw-chain info, events, and the final ranking (including card counts). Opponent exact hand counts are public only at 3 cards or fewer.
+**Public:** player names, whose turn it is, host/connected status, whether a player is at UNO count (one card), game status, draw-chain info, events, and the final ranking (including card counts). Opponent exact hand counts are public only at 4 cards or more.
 
-**Private:** exact opponent card counts above 3, the actual cards in an opponent's hand, those cards' IDs, whether opponents declared UNO, usernames, and password hashes. Each client only receives its own hand.
+**Private:** exact opponent card counts below 4, the actual cards in an opponent's hand, those cards' IDs, whether opponents declared UNO, usernames, and password hashes. Each client only receives its own hand.
 
 ## In-memory limitation
 

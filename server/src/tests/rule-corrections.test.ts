@@ -144,10 +144,17 @@ describe("jogada agrupada após comprar", () => {
 });
 
 describe("declaração e acusação de UNO", () => {
-  it("expõe contagem pública apenas até 3 cartas sem expor cartas adversárias", () => {
+  it("oculta contagem pública com menos de 4 cartas sem expor cartas adversárias", () => {
     const game = setup();
     give(game, "P1", number("red", 1));
-    give(game, "P2", number("blue", 2), number("yellow", 3));
+    give(
+      game,
+      "P2",
+      number("blue", 2),
+      number("yellow", 3),
+      number("green", 4),
+      number("red", 5),
+    );
     const serialized = JSON.stringify(
       game.toPlayerView("ABCD", "P1", "P1"),
     );
@@ -155,16 +162,16 @@ describe("declaração e acusação de UNO", () => {
       game
         .toPlayerView("ABCD", "P1", "P1")
         .players.find((player) => player.id === "P2")?.cardCount,
-    ).toBe(2);
+    ).toBe(4);
     expect(serialized).not.toContain(game.getPlayer("P2").hand[0]!.id);
 
     const outsider = game.toPlayerView("ABCD", "P1", "P2");
     expect(
       outsider.players.find((player) => player.id === "P1")?.cardCount,
-    ).toBe(1);
+    ).toBeNull();
     expect(
       outsider.players.find((player) => player.id === "P2")?.cardCount,
-    ).toBe(2);
+    ).toBe(4);
   });
 
   it("exige nova declaração ao chegar a exatamente uma carta", () => {
@@ -351,7 +358,7 @@ describe("fim de partida e reinício explícito", () => {
     );
   });
 
-  it("estado público oculta contagem acima de 3 cartas", () => {
+  it("estado público oculta contagem abaixo de 4 cartas", () => {
     const game = new Game([
       { id: "P1", nickname: "P1" },
       { id: "P2", nickname: "P2" },
@@ -364,8 +371,8 @@ describe("fim de partida e reinício explícito", () => {
     const p1View = game.toPlayerView("ABCD", "P1", "P1");
     const p2View = game.toPlayerView("ABCD", "P1", "P2");
 
-    expect(p1View.players.find((player) => player.id === "P2")?.cardCount).toBe(3);
-    expect(p2View.players.find((player) => player.id === "P1")?.cardCount).toBeNull();
+    expect(p1View.players.find((player) => player.id === "P2")?.cardCount).toBeNull();
+    expect(p2View.players.find((player) => player.id === "P1")?.cardCount).toBe(4);
   });
 
   it("somente restart explícito cria uma rodada nova com estado limpo", () => {

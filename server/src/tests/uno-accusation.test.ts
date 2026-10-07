@@ -212,10 +212,10 @@ describe("acusação de UNO a qualquer momento", () => {
     );
 
     expect(viewer1.currentPlayerId).toBe("P3");
-    expect(targetViewer1?.cardCount).toBe(1);
+    expect(targetViewer1?.cardCount).toBeNull();
     expect(targetViewer1?.canAccuseUno).toBe(true);
     expect(targetViewer1?.isAtUnoCount).toBe(true);
-    expect(targetViewer2?.cardCount).toBe(1);
+    expect(targetViewer2?.cardCount).toBeNull();
     expect(targetViewer2?.canAccuseUno).toBe(true);
     expect(targetViewer2?.isAtUnoCount).toBe(true);
   });

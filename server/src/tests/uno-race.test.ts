@@ -212,7 +212,7 @@ describe("corrida UNO sem espião", () => {
     ).toBe(false);
     expect(
       view(game, "P1").players.find((player) => player.id === "P2")?.cardCount,
-    ).toBe(3);
+    ).toBeNull();
   });
 
   it("duas acusações simultâneas não punem o alvo duas vezes", () => {
