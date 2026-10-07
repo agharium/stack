@@ -65,9 +65,9 @@ PostgreSQL does **not** store active gameplay (hands, turns, draw chains, UNO ac
 
 The global leaderboard is based only on match victories. Every authenticated match win counts as one victory. Other finishing positions do not award points.
 
-- **Vitùrias** ù primary ranking value (descending)
-- **Partidas** ù games played (informational; fewer games is only a tie-breaker)
-- **Taxa de vitùria** ù informational only; does not affect order
+- **VitÔøΩrias** ÔøΩ primary ranking value (descending)
+- **Partidas** ÔøΩ games played (informational; fewer games is only a tie-breaker)
+- **Taxa de vitÔøΩria** ÔøΩ informational only; does not affect order
 
 Only results linked to a registered account count toward the leaderboard. Guest results are saved for match history integrity but excluded from aggregation.
 
@@ -183,7 +183,7 @@ While a chain is active, the targeted player may only:
 
 Opponent hand sizes are visible while they have four or more cards. Once a player drops below four cards, their exact count is hidden (`? cartas`) so the table cannot easily telegraph an approaching UNO.
 
-When a player reaches one card, they race to declare UNO with `Tù de UNO!` before any opponent catches them with `Nùo falou UNO!`. If the player declares first, they are safe. If an opponent accuses first, the player draws two cards. UNO declaration and accusation are resolved authoritatively by server processing order.
+When a player reaches one card, they race to declare UNO with `TÔøΩ de UNO!` before any opponent catches them with `NÔøΩo falou UNO!`. If the player declares first, they are safe. If an opponent accuses first, the player draws two cards. UNO declaration and accusation are resolved authoritatively by server processing order.
 
 - Successful accusation (1 card, UNO not declared): target draws 2.
 - Stale accusation after UNO was declared: rejected with no penalty.
