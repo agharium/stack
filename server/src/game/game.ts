@@ -26,10 +26,20 @@ export type GamePlayer = {
   unoDeclared: boolean;
   /** Timestamp when the player last became UNO-vulnerable; null when not at 1 undeclared. */
   unoVulnerableAt: number | null;
+  /** Recent accuse attempt timestamps (for spam detection). */
+  accuseAttemptAts: number[];
+  /** When set and in the future, this player cannot accuse. */
+  accuseBlockedUntil: number | null;
 };
 
 /** Grace window before opponents may accuse after a player reaches one card. */
 export const UNO_ACCUSE_GRACE_MS = 1000;
+/** How many accuse attempts in the spam window trigger a block. */
+export const UNO_ACCUSE_SPAM_COUNT = 5;
+/** Sliding window used to detect frantic accuse clicking. */
+export const UNO_ACCUSE_SPAM_WINDOW_MS = 2000;
+/** How long a spamming accuser is locked out. */
+export const UNO_ACCUSE_BLOCK_MS = 60_000;
 
 export type PendingDrawPlay = {
   playerId: string;
@@ -96,6 +106,8 @@ export class Game {
       hand: [],
       unoDeclared: false,
       unoVulnerableAt: null,
+      accuseAttemptAts: [],
+      accuseBlockedUntil: null,
     }));
   }
 
@@ -122,6 +134,8 @@ export class Game {
       player.hand = [];
       player.unoDeclared = false;
       player.unoVulnerableAt = null;
+      player.accuseAttemptAts = [];
+      player.accuseBlockedUntil = null;
     }
     this.drawPile = shuffle(createDeck(), this.random);
     this.discardPile = [];
@@ -535,7 +549,7 @@ export class Game {
     return this.now() >= player.unoVulnerableAt + UNO_ACCUSE_GRACE_MS;
   }
 
-  /** Milliseconds until the next accuse button should be revealed, if any. */
+  /** Milliseconds until the next accuse grace reveal, if any. */
   msUntilUnoAccuseReveal(): number | null {
     if (this.phase !== "playing") return null;
     const now = this.now();
@@ -556,6 +570,64 @@ export class Game {
     return soonest;
   }
 
+  /** Milliseconds until the soonest accuse spam block expires, if any. */
+  msUntilAccuseBlockLift(): number | null {
+    if (this.phase !== "playing") return null;
+    const now = this.now();
+    let soonest: number | null = null;
+    for (const player of this.players) {
+      if (player.accuseBlockedUntil == null || player.accuseBlockedUntil <= now) {
+        continue;
+      }
+      const remaining = player.accuseBlockedUntil - now;
+      if (soonest === null || remaining < soonest) {
+        soonest = remaining;
+      }
+    }
+    return soonest;
+  }
+
+  /** Milliseconds until accuse UI should refresh (grace reveal or spam unlock). */
+  msUntilAccuseUiRefresh(): number | null {
+    const candidates = [
+      this.msUntilUnoAccuseReveal(),
+      this.msUntilAccuseBlockLift(),
+    ].filter((value): value is number => value != null);
+    if (candidates.length === 0) return null;
+    return Math.min(...candidates);
+  }
+
+  private isAccuseBlocked(player: GamePlayer): boolean {
+    if (player.accuseBlockedUntil == null) return false;
+    if (this.now() >= player.accuseBlockedUntil) {
+      player.accuseBlockedUntil = null;
+      return false;
+    }
+    return true;
+  }
+
+  /** Records an accuse click; throws and locks out on spam. */
+  private noteAccuseAttempt(accuser: GamePlayer): void {
+    const now = this.now();
+    if (this.isAccuseBlocked(accuser)) {
+      throw new Error(ERRORS.unoAccuseSpamBlocked);
+    }
+
+    accuser.accuseAttemptAts = accuser.accuseAttemptAts.filter(
+      (timestamp) => now - timestamp < UNO_ACCUSE_SPAM_WINDOW_MS,
+    );
+    accuser.accuseAttemptAts.push(now);
+
+    if (accuser.accuseAttemptAts.length >= UNO_ACCUSE_SPAM_COUNT) {
+      accuser.accuseBlockedUntil = now + UNO_ACCUSE_BLOCK_MS;
+      accuser.accuseAttemptAts = [];
+      this.addEvent(
+        `${accuser.nickname} foi bloqueado de acusar por 1 minuto (zé cliquinho).`,
+      );
+      throw new Error(ERRORS.unoAccuseSpamBlocked);
+    }
+  }
+
   accuseUno(accuserId: string, targetId: string): void {
     if (this.phase === "finished") throw new Error(ERRORS.gameFinished);
     if (this.phase !== "playing") throw new Error(ERRORS.gameNotStarted);
@@ -563,6 +635,8 @@ export class Game {
     const accuser = this.getPlayer(accuserId);
     const target = this.getPlayer(targetId);
     if (!accuser.connected) throw new Error(ERRORS.disconnected);
+
+    this.noteAccuseAttempt(accuser);
 
     if (target.unoDeclared) {
       throw new Error(ERRORS.unoAlreadyDeclaredByTarget);
@@ -642,6 +716,7 @@ export class Game {
     const nextPlayerId = this.getNextPlayerId();
     const previousPlayerId =
       this.phase === "playing" ? this.lastPlayerId : null;
+    const viewerAccuseBlocked = this.isAccuseBlocked(viewer);
     return {
       roomCode,
       phase: this.phase,
@@ -670,7 +745,8 @@ export class Game {
           isNextTurn: nextPlayerId === player.id,
         };
         if (this.phase === "playing" && !isSelf) {
-          playerView.canAccuseUno = this.isUnoVulnerable(player);
+          playerView.canAccuseUno =
+            !viewerAccuseBlocked && this.isUnoVulnerable(player);
         }
         return playerView;
       }),

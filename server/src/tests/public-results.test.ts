@@ -185,6 +185,8 @@ describe("responsividade do placar público", () => {
     expect(source).toContain("grid grid-cols-2");
     expect(source).toContain("? cartas");
     expect(source).toContain('player.cardCount === 1 ? "carta" : "cartas"');
+    expect(source).toContain("accuseClicksEnabled");
+    expect(source).toContain("canAccuseClick");
     expect(source).not.toMatch(/hidden[^"]*PlayerBoard|PlayerBoard[^"]*hidden/);
   });
 });

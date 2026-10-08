@@ -152,12 +152,12 @@ export function registerSocketHandlers(
       })();
     });
 
-    const scheduleUnoAccuseReveal = (room: Room): void => {
+    const scheduleAccuseUiRefresh = (room: Room): void => {
       if (room.unoAccuseRevealTimer) {
         clearTimeout(room.unoAccuseRevealTimer);
         room.unoAccuseRevealTimer = null;
       }
-      const delay = room.game.msUntilUnoAccuseReveal();
+      const delay = room.game.msUntilAccuseUiRefresh();
       if (delay == null) return;
       room.unoAccuseRevealTimer = setTimeout(() => {
         room.unoAccuseRevealTimer = null;
@@ -169,7 +169,7 @@ export function registerSocketHandlers(
     const afterGameAction = (room: Room): void => {
       emitState(room);
       maybePersistMatch(room);
-      scheduleUnoAccuseReveal(room);
+      scheduleAccuseUiRefresh(room);
     };
 
     socket.on("start-game", (payload, ack) => {
@@ -262,12 +262,18 @@ export function registerSocketHandlers(
     });
 
     socket.on("accuse-uno", (payload, ack) => {
+      let room: Room | null = null;
       try {
-        const room = authorize(socket, payload.roomCode, payload.playerId);
+        room = authorize(socket, payload.roomCode, payload.playerId);
         room.game.accuseUno(payload.playerId, payload.targetPlayerId);
         afterGameAction(room);
         ack(success());
       } catch (error) {
+        // Spam lock still needs a state push so accuse buttons disappear.
+        if (room) {
+          emitState(room);
+          scheduleAccuseUiRefresh(room);
+        }
         ack(failure(error));
       }
     });

@@ -167,6 +167,8 @@ export class RoomManager {
       hand: [],
       unoDeclared: false,
       unoVulnerableAt: null,
+      accuseAttemptAts: [],
+      accuseBlockedUntil: null,
     });
     return { room, player, reconnected: false };
   }

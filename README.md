@@ -189,6 +189,7 @@ When a player reaches one card, they can declare UNO immediately with `Tô de UN
 - Accusation during the grace window: rejected with no penalty.
 - Stale accusation after UNO was declared: rejected with no penalty.
 - Stale UNO declaration after a successful accusation: rejected with no effect.
+- Frantic clicking on an opponent's player card (5 accuse attempts within 2 seconds, including before the accuse button appears): that player is blocked from accusing for 1 minute, with the message "Você não pode acusar pelo próximo minuto." The table also sees it in the match history.
 
 These draws are administrative. They do not start a draw chain and do not change whose turn it is.
 

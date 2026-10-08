@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Card, CardColor } from "../../../shared/types.js";
-import { Game, UNO_ACCUSE_GRACE_MS } from "../game/game.js";
+import {
+  Game,
+  UNO_ACCUSE_BLOCK_MS,
+  UNO_ACCUSE_GRACE_MS,
+  UNO_ACCUSE_SPAM_COUNT,
+} from "../game/game.js";
 import { ERRORS } from "../messages.js";
 
 let serial = 90_000;
@@ -323,5 +328,85 @@ describe("corrida UNO sem espião", () => {
       ERRORS.unoAlreadyDeclaredByTarget,
     );
     expect(game.getPlayer("P2").hand).toHaveLength(1);
+  });
+
+  it("bloqueia acusador por 1 minuto após 5 cliques seguidos", () => {
+    let now = 5_000_000;
+    const ids = ["P1", "P2", "P3"];
+    const game = new Game(
+      ids.map((id) => ({ id, nickname: id })),
+      () => 0.35,
+      () => now,
+    );
+    game.phase = "playing";
+    game.matchPlayerOrder = [...ids];
+    game.currentPlayerIndex = 0;
+    game.activeColor = "red";
+    game.discardPile = [number("red", 5)];
+    game.drawPile = Array.from({ length: 50 }, (_, index) =>
+      number("blue", index % 9),
+    );
+    give(game, "P2", number("red", 1));
+
+    for (let index = 0; index < UNO_ACCUSE_SPAM_COUNT - 1; index += 1) {
+      now += 10;
+      expect(() => game.accuseUno("P1", "P3")).toThrow(
+        ERRORS.targetNoLongerAtUnoCount,
+      );
+    }
+    now += 10;
+    expect(() => game.accuseUno("P1", "P3")).toThrow(
+      ERRORS.unoAccuseSpamBlocked,
+    );
+    expect(game.getPlayer("P1").accuseBlockedUntil).toBe(
+      now + UNO_ACCUSE_BLOCK_MS,
+    );
+    expect(game.events.at(-1)?.text).toBe(
+      "P1 foi bloqueado de acusar por 1 minuto (zé cliquinho).",
+    );
+    expect(
+      view(game, "P1").players.find((player) => player.id === "P2")?.canAccuseUno,
+    ).toBe(false);
+
+    const eventCount = game.events.length;
+    now += 10;
+    expect(() => game.accuseUno("P1", "P2")).toThrow(
+      ERRORS.unoAccuseSpamBlocked,
+    );
+    expect(game.events).toHaveLength(eventCount);
+    expect(game.getPlayer("P2").hand).toHaveLength(1);
+
+    now += UNO_ACCUSE_BLOCK_MS;
+    expect(
+      view(game, "P1").players.find((player) => player.id === "P2")?.canAccuseUno,
+    ).toBe(true);
+    game.accuseUno("P1", "P2");
+    expect(game.getPlayer("P2").hand).toHaveLength(3);
+  });
+
+  it("não bloqueia acusador com cliques espaçados", () => {
+    let now = 6_000_000;
+    const ids = ["P1", "P2", "P3"];
+    const game = new Game(
+      ids.map((id) => ({ id, nickname: id })),
+      () => 0.35,
+      () => now,
+    );
+    game.phase = "playing";
+    game.matchPlayerOrder = [...ids];
+    game.currentPlayerIndex = 0;
+    game.activeColor = "red";
+    game.discardPile = [number("red", 5)];
+    game.drawPile = Array.from({ length: 50 }, (_, index) =>
+      number("blue", index % 9),
+    );
+
+    for (let index = 0; index < UNO_ACCUSE_SPAM_COUNT; index += 1) {
+      now += 2_100;
+      expect(() => game.accuseUno("P1", "P3")).toThrow(
+        ERRORS.targetNoLongerAtUnoCount,
+      );
+    }
+    expect(game.getPlayer("P1").accuseBlockedUntil).toBeNull();
   });
 });

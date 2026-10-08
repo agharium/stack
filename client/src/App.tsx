@@ -566,7 +566,16 @@ export default function App() {
       accuseUno={(targetPlayerId) => {
         if (!session) return;
         socket.emit("accuse-uno", { ...session, targetPlayerId }, (result) => {
-          if (!result.ok) setError(result.error);
+          if (!result.ok) {
+            // Premature card-mashing still counts server-side; don't banner-spam.
+            if (
+              result.error === "Aguarde um momento para acusar." ||
+              result.error === "Esse jogador não está mais com uma carta."
+            ) {
+              return;
+            }
+            setError(result.error);
+          }
         });
       }}
       renamePlayer={(targetPlayerId, currentName) => {
@@ -820,6 +829,7 @@ function GameTable(props: GameProps) {
         <PlayerBoard
           players={state.players}
           selfId={state.selfId}
+          accuseClicksEnabled={state.phase === "playing"}
           canRename={state.selfId === state.hostId}
           onAccuseUno={props.accuseUno}
           onRenamePlayer={props.renamePlayer}

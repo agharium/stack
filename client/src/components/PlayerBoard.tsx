@@ -3,6 +3,8 @@ import type { PublicPlayer } from "../../../shared/types";
 type Props = {
   players: PublicPlayer[];
   selfId: string;
+  /** When true, opponent cards register accuse attempts (including before the button appears). */
+  accuseClicksEnabled?: boolean;
   canRename?: boolean;
   onAccuseUno: (playerId: string) => void;
   onRenamePlayer?: (playerId: string, currentName: string) => void;
@@ -21,6 +23,7 @@ function formatCardCount(player: PublicPlayer, isSelf: boolean): string {
 export function PlayerBoard({
   players,
   selfId,
+  accuseClicksEnabled = false,
   canRename = false,
   onAccuseUno,
   onRenamePlayer,
@@ -41,14 +44,36 @@ export function PlayerBoard({
           const isSelf = player.id === selfId;
           const cardLabel = formatCardCount(player, isSelf);
           const showAccuse = player.canAccuseUno === true;
+          const canAccuseClick = accuseClicksEnabled && !isSelf;
           return (
             <article
               key={player.id}
+              onClick={
+                canAccuseClick ? () => onAccuseUno(player.id) : undefined
+              }
+              onKeyDown={
+                canAccuseClick
+                  ? (event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onAccuseUno(player.id);
+                      }
+                    }
+                  : undefined
+              }
+              role={canAccuseClick ? "button" : undefined}
+              tabIndex={canAccuseClick ? 0 : undefined}
+              aria-label={
+                canAccuseClick
+                  ? `Acusar ${player.nickname} de não ter falado UNO`
+                  : undefined
+              }
               className={[
                 "min-w-0 rounded-xl border px-3 py-2",
                 player.isCurrentTurn
                   ? "border-lime-300 bg-lime-300/15 shadow-md shadow-lime-950/25"
                   : "border-white/10 bg-white/[.04]",
+                canAccuseClick ? "cursor-pointer" : "",
               ].join(" ")}
             >
               <div className="flex min-w-0 items-center gap-1.5">
@@ -58,7 +83,10 @@ export function PlayerBoard({
                 {canRename && !isSelf && onRenamePlayer && (
                   <button
                     type="button"
-                    onClick={() => onRenamePlayer(player.id, player.nickname)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onRenamePlayer(player.id, player.nickname);
+                    }}
                     title={`Renomear ${player.nickname}`}
                     aria-label={`Renomear ${player.nickname}`}
                     className="grid h-6 w-6 shrink-0 cursor-pointer place-items-center rounded-full text-indigo-200 hover:bg-white/10 hover:text-white"
@@ -128,15 +156,12 @@ export function PlayerBoard({
                 )}
               </div>
               {showAccuse && (
-                <button
-                  type="button"
-                  onClick={() => onAccuseUno(player.id)}
-                  title="Acusar de não ter falado UNO"
-                  aria-label={`Acusar ${player.nickname} de não ter falado UNO`}
-                  className="mt-2 min-h-9 cursor-pointer rounded-full bg-amber-400 px-3 text-[11px] font-black text-slate-950"
+                <span
+                  aria-hidden="true"
+                  className="mt-2 inline-flex min-h-9 items-center rounded-full bg-amber-400 px-3 text-[11px] font-black text-slate-950"
                 >
                   Não falou UNO!
-                </button>
+                </span>
               )}
             </article>
           );
