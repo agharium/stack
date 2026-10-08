@@ -192,7 +192,31 @@ input:focus-visible {
   font-size: 1.1rem;
   font-weight: 1000;
   box-shadow: 0 5px 0 #ca8a04;
+  min-width: 11.5rem;
+  text-align: center;
+}
+
+.uno-button.is-ready {
   animation: uno-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.uno-button-dock {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 20;
+  padding: 0.75rem 0.75rem max(0.75rem, env(safe-area-inset-bottom));
+  background: linear-gradient(
+    to top,
+    rgb(15 12 40 / 0.96),
+    rgb(15 12 40 / 0.88) 55%,
+    transparent
+  );
+}
+
+.uno-button-dock .uno-button {
+  width: 100%;
+  min-height: 3.25rem;
 }
 
 .color-choice {

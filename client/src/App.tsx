@@ -735,6 +735,23 @@ function GameTable(props: GameProps) {
     () => groupStacksByColor(handStacks),
     [handStacks],
   );
+  const unoReady =
+    state.phase === "playing" &&
+    state.hand.length === 1 &&
+    !state.selfUnoDeclared &&
+    !props.busy;
+  const unoDisabled =
+    props.busy || state.hand.length !== 1 || state.selfUnoDeclared;
+  const unoLabel = state.selfUnoDeclared
+    ? "UNO declarado ✓"
+    : state.hand.length === 1
+      ? "TÔ DE UNO!"
+      : "Tô de UNO!";
+  const unoAriaLabel = state.selfUnoDeclared
+    ? "UNO já declarado"
+    : state.hand.length === 1
+      ? "Declarar UNO"
+      : "Declarar UNO — disponível com uma carta";
   const playable = useMemo(
     () => new Set(state.hand.filter((card) => visuallyPlayable(card, state)).map((card) => card.id)),
     [state],
@@ -825,7 +842,12 @@ function GameTable(props: GameProps) {
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-7xl flex-col px-3 pb-3 sm:px-6">
+      <div
+        className={[
+          "mx-auto flex max-w-7xl flex-col px-3 sm:px-6",
+          state.phase === "playing" ? "pb-24 sm:pb-3" : "pb-3",
+        ].join(" ")}
+      >
         <PlayerBoard
           players={state.players}
           selfId={state.selfId}
@@ -908,30 +930,16 @@ function GameTable(props: GameProps) {
               <button
                 type="button"
                 onClick={props.callUno}
-                disabled={
-                  props.busy ||
-                  state.hand.length !== 1 ||
-                  state.selfUnoDeclared
-                }
-                aria-label={
-                  state.selfUnoDeclared
-                    ? "UNO já declarado"
-                    : state.hand.length === 1
-                      ? "Declarar UNO"
-                      : "Declarar UNO — disponível com uma carta"
-                }
+                disabled={unoDisabled}
+                aria-label={unoAriaLabel}
                 className={[
-                  "uno-button",
-                  state.hand.length === 1 && !state.selfUnoDeclared && !props.busy
-                    ? "cursor-pointer"
+                  "uno-button hidden sm:inline-flex",
+                  unoReady
+                    ? "is-ready cursor-pointer"
                     : "cursor-not-allowed opacity-60",
                 ].join(" ")}
               >
-                {state.selfUnoDeclared
-                  ? "UNO declarado ✓"
-                  : state.hand.length === 1
-                    ? "TÔ DE UNO!"
-                    : "Tô de UNO!"}
+                {unoLabel}
               </button>
             )}
           </div>
@@ -1126,6 +1134,25 @@ function GameTable(props: GameProps) {
           busy={props.busy}
           onRestart={props.restart}
         />
+      )}
+
+      {state.phase === "playing" && (
+        <div className="uno-button-dock sm:hidden">
+          <button
+            type="button"
+            onClick={props.callUno}
+            disabled={unoDisabled}
+            aria-label={unoAriaLabel}
+            className={[
+              "uno-button",
+              unoReady
+                ? "is-ready cursor-pointer"
+                : "cursor-not-allowed opacity-60",
+            ].join(" ")}
+          >
+            {unoLabel}
+          </button>
+        </div>
       )}
     </main>
   );
