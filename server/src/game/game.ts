@@ -24,7 +24,12 @@ export type GamePlayer = {
   connected: boolean;
   hand: Card[];
   unoDeclared: boolean;
+  /** Timestamp when the player last became UNO-vulnerable; null when not at 1 undeclared. */
+  unoVulnerableAt: number | null;
 };
+
+/** Grace window before opponents may accuse after a player reaches one card. */
+export const UNO_ACCUSE_GRACE_MS = 1000;
 
 export type PendingDrawPlay = {
   playerId: string;
@@ -81,6 +86,7 @@ export class Game {
       connected?: boolean;
     }>,
     private readonly random: () => number = Math.random,
+    private readonly now: () => number = Date.now,
   ) {
     this.players = players.map((player) => ({
       id: player.id,
@@ -89,6 +95,7 @@ export class Game {
       connected: player.connected ?? true,
       hand: [],
       unoDeclared: false,
+      unoVulnerableAt: null,
     }));
   }
 
@@ -114,6 +121,7 @@ export class Game {
     for (const player of this.players) {
       player.hand = [];
       player.unoDeclared = false;
+      player.unoVulnerableAt = null;
     }
     this.drawPile = shuffle(createDeck(), this.random);
     this.discardPile = [];
@@ -320,9 +328,11 @@ export class Game {
     }
 
     if (player.hand.length === 0) {
+      player.unoVulnerableAt = null;
       this.finishGame(player);
       return;
     }
+    this.refreshUnoVulnerability(player);
     if (this.drawChain) {
       this.applyDrawChainCards(player, card, cards.length, chosenColor);
     } else {
@@ -426,6 +436,7 @@ export class Game {
     const card = this.drawRaw();
     this.currentPlayer.unoDeclared = false;
     this.currentPlayer.hand.push(card);
+    this.refreshUnoVulnerability(this.currentPlayer);
     this.addEvent(`${this.currentPlayer.nickname} comprou uma carta.`);
     if (this.canPlayImmediatelyAfterDraw(card)) {
       this.pendingDrawPlay = { playerId, cardId: card.id };
@@ -478,6 +489,7 @@ export class Game {
       player.hand.push(this.drawRaw());
     }
     player.unoDeclared = false;
+    this.refreshUnoVulnerability(player);
     this.drawChain = null;
     this.addEvent(`${player.nickname} comprou ${amount} cartas.`);
     this.advanceTurn();
@@ -493,15 +505,55 @@ export class Game {
     }
     if (player.unoDeclared) throw new Error(ERRORS.unoAlreadyDeclared);
     player.unoDeclared = true;
+    player.unoVulnerableAt = null;
     this.addEvent(`${player.nickname} gritou UNO!`);
   }
 
-  private isUnoVulnerable(player: GamePlayer): boolean {
-    return (
+  private refreshUnoVulnerability(player: GamePlayer): void {
+    if (
       this.phase === "playing" &&
       player.hand.length === 1 &&
       !player.unoDeclared
-    );
+    ) {
+      if (player.unoVulnerableAt == null) {
+        player.unoVulnerableAt = this.now();
+      }
+      return;
+    }
+    player.unoVulnerableAt = null;
+  }
+
+  private isUnoVulnerable(player: GamePlayer): boolean {
+    if (
+      this.phase !== "playing" ||
+      player.hand.length !== 1 ||
+      player.unoDeclared ||
+      player.unoVulnerableAt == null
+    ) {
+      return false;
+    }
+    return this.now() >= player.unoVulnerableAt + UNO_ACCUSE_GRACE_MS;
+  }
+
+  /** Milliseconds until the next accuse button should be revealed, if any. */
+  msUntilUnoAccuseReveal(): number | null {
+    if (this.phase !== "playing") return null;
+    const now = this.now();
+    let soonest: number | null = null;
+    for (const player of this.players) {
+      if (
+        player.hand.length !== 1 ||
+        player.unoDeclared ||
+        player.unoVulnerableAt == null
+      ) {
+        continue;
+      }
+      const remaining = player.unoVulnerableAt + UNO_ACCUSE_GRACE_MS - now;
+      if (remaining > 0 && (soonest === null || remaining < soonest)) {
+        soonest = remaining;
+      }
+    }
+    return soonest;
   }
 
   accuseUno(accuserId: string, targetId: string): void {
@@ -518,9 +570,13 @@ export class Game {
     if (target.hand.length !== 1) {
       throw new Error(ERRORS.targetNoLongerAtUnoCount);
     }
+    if (!this.isUnoVulnerable(target)) {
+      throw new Error(ERRORS.unoAccuseTooSoon);
+    }
 
     target.hand.push(this.drawRaw(), this.drawRaw());
     target.unoDeclared = false;
+    target.unoVulnerableAt = null;
     this.addEvent(
       `${accuser.nickname} pegou ${target.nickname} sem falar UNO! ${target.nickname} comprou 2 cartas.`,
     );
@@ -532,6 +588,7 @@ export class Game {
     this.drawChain = null;
     this.pendingDrawPlay = null;
     winner.unoDeclared = false;
+    winner.unoVulnerableAt = null;
 
     const ordered = [...this.players].sort((a, b) => {
       if (a.id === winner.id) return -1;

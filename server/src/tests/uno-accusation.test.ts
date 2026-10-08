@@ -34,7 +34,10 @@ function setup(): Game {
 }
 
 function give(game: Game, playerId: string, ...cards: Card[]): void {
-  game.getPlayer(playerId).hand = cards;
+  const player = game.getPlayer(playerId);
+  player.hand = cards;
+  player.unoVulnerableAt =
+    cards.length === 1 && !player.unoDeclared ? 0 : null;
 }
 
 describe("acusação de UNO a qualquer momento", () => {

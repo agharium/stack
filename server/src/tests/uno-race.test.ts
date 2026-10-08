@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Card, CardColor } from "../../../shared/types.js";
-import { Game } from "../game/game.js";
+import { Game, UNO_ACCUSE_GRACE_MS } from "../game/game.js";
 import { ERRORS } from "../messages.js";
 
 let serial = 90_000;
@@ -29,7 +29,10 @@ function setup(): Game {
 }
 
 function give(game: Game, playerId: string, ...cards: Card[]): void {
-  game.getPlayer(playerId).hand = cards;
+  const player = game.getPlayer(playerId);
+  player.hand = cards;
+  player.unoVulnerableAt =
+    cards.length === 1 && !player.unoDeclared ? 0 : null;
 }
 
 function view(game: Game, viewerId = "P2") {
@@ -253,5 +256,72 @@ describe("corrida UNO sem espião", () => {
     );
     expect(game.getPlayer("P1").hand).toHaveLength(0);
     expect(game.getPlayer("P2").hand).toHaveLength(2);
+  });
+
+  it("atrasa canAccuseUno e acusação por 1s após chegar a uma carta", () => {
+    let now = 1_000_000;
+    const ids = ["P1", "P2", "P3"];
+    const game = new Game(
+      ids.map((id) => ({ id, nickname: id })),
+      () => 0.35,
+      () => now,
+    );
+    game.phase = "playing";
+    game.matchPlayerOrder = [...ids];
+    game.currentPlayerIndex = 1;
+    game.activeColor = "red";
+    game.discardPile = [number("red", 5)];
+    game.drawPile = Array.from({ length: 50 }, (_, index) =>
+      number("blue", index % 9),
+    );
+
+    const played = number("red", 4);
+    give(game, "P2", played, number("yellow", 2));
+    game.playCard("P2", played.id);
+
+    expect(game.getPlayer("P2").hand).toHaveLength(1);
+    expect(game.getPlayer("P2").unoVulnerableAt).toBe(now);
+    expect(
+      view(game, "P1").players.find((player) => player.id === "P2")?.canAccuseUno,
+    ).toBe(false);
+    expect(() => game.accuseUno("P1", "P2")).toThrow(ERRORS.unoAccuseTooSoon);
+    expect(game.msUntilUnoAccuseReveal()).toBe(UNO_ACCUSE_GRACE_MS);
+
+    now += UNO_ACCUSE_GRACE_MS;
+    expect(
+      view(game, "P1").players.find((player) => player.id === "P2")?.canAccuseUno,
+    ).toBe(true);
+    expect(game.msUntilUnoAccuseReveal()).toBeNull();
+    game.accuseUno("P1", "P2");
+    expect(game.getPlayer("P2").hand).toHaveLength(3);
+  });
+
+  it("permite declarar UNO durante a janela de graça", () => {
+    let now = 1_000_000;
+    const ids = ["P1", "P2", "P3"];
+    const game = new Game(
+      ids.map((id) => ({ id, nickname: id })),
+      () => 0.35,
+      () => now,
+    );
+    game.phase = "playing";
+    game.matchPlayerOrder = [...ids];
+    game.currentPlayerIndex = 1;
+    game.activeColor = "red";
+    game.discardPile = [number("red", 5)];
+    game.drawPile = Array.from({ length: 50 }, (_, index) =>
+      number("blue", index % 9),
+    );
+
+    const played = number("red", 4);
+    give(game, "P2", played, number("yellow", 2));
+    game.playCard("P2", played.id);
+    game.declareUno("P2");
+
+    now += UNO_ACCUSE_GRACE_MS;
+    expect(() => game.accuseUno("P1", "P2")).toThrow(
+      ERRORS.unoAlreadyDeclaredByTarget,
+    );
+    expect(game.getPlayer("P2").hand).toHaveLength(1);
   });
 });

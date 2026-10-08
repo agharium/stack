@@ -37,7 +37,10 @@ function setup(names = ["P1", "P2", "P3", "P4"]): Game {
 }
 
 function give(game: Game, playerId: string, ...cards: Card[]): void {
-  game.getPlayer(playerId).hand = cards;
+  const player = game.getPlayer(playerId);
+  player.hand = cards;
+  player.unoVulnerableAt =
+    cards.length === 1 && !player.unoDeclared ? 0 : null;
 }
 
 describe("playing identical groups", () => {

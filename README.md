@@ -183,9 +183,10 @@ While a chain is active, the targeted player may only:
 
 Opponent hand sizes are visible while they have four or more cards. Once a player drops below four cards, their exact count is hidden (`? cartas`) so the table cannot easily telegraph an approaching UNO.
 
-When a player reaches one card, they race to declare UNO with `T� de UNO!` before any opponent catches them with `N�o falou UNO!`. If the player declares first, they are safe. If an opponent accuses first, the player draws two cards. UNO declaration and accusation are resolved authoritatively by server processing order.
+When a player reaches one card, they can declare UNO immediately with `Tô de UNO!`. Opponents only see `Não falou UNO!` after a **1 second** grace window, so the player who just played has a fair chance to click first. If an opponent accuses after that window and UNO was not declared, the player draws two cards. Declaration and accusation are resolved authoritatively by server processing order.
 
-- Successful accusation (1 card, UNO not declared): target draws 2.
+- Successful accusation (1 card, UNO not declared, grace elapsed): target draws 2.
+- Accusation during the grace window: rejected with no penalty.
 - Stale accusation after UNO was declared: rejected with no penalty.
 - Stale UNO declaration after a successful accusation: rejected with no effect.
 

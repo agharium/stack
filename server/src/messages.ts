@@ -31,6 +31,7 @@ export const ERRORS = {
   unoAlreadyDeclared: "Você já declarou UNO.",
   unoAlreadyDeclaredByTarget: "Esse jogador já declarou UNO.",
   targetNoLongerAtUnoCount: "Esse jogador não está mais com uma carta.",
+  unoAccuseTooSoon: "Aguarde um momento para acusar.",
   catchSelf: "Você não pode denunciar a si mesmo.",
   disconnected: "Você está desconectado.",
   gameNotStarted: "A partida ainda não começou.",

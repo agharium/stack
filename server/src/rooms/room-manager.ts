@@ -24,6 +24,7 @@ export type Room = {
   players: RoomPlayer[];
   game: Game;
   matchPersisted: boolean;
+  unoAccuseRevealTimer: ReturnType<typeof setTimeout> | null;
 };
 
 function resolveDisplayName(
@@ -66,6 +67,7 @@ export class RoomManager {
       players: [player],
       game,
       matchPersisted: false,
+      unoAccuseRevealTimer: null,
     };
     this.rooms.set(code, room);
     return { room, player };
@@ -164,6 +166,7 @@ export class RoomManager {
       connected: true,
       hand: [],
       unoDeclared: false,
+      unoVulnerableAt: null,
     });
     return { room, player, reconnected: false };
   }
@@ -236,6 +239,10 @@ export class RoomManager {
 
       const connected = room.players.filter((candidate) => candidate.connected);
       if (connected.length === 0) {
+        if (room.unoAccuseRevealTimer) {
+          clearTimeout(room.unoAccuseRevealTimer);
+          room.unoAccuseRevealTimer = null;
+        }
         this.rooms.delete(room.code);
         return null;
       }

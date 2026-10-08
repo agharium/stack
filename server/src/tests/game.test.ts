@@ -39,7 +39,10 @@ function gameFor(names = ["P1", "P2", "P3"]): Game {
 }
 
 function give(game: Game, playerId: string, ...cards: Card[]): Card[] {
-  game.getPlayer(playerId).hand = cards;
+  const player = game.getPlayer(playerId);
+  player.hand = cards;
+  player.unoVulnerableAt =
+    cards.length === 1 && !player.unoDeclared ? 0 : null;
   return cards;
 }
 
@@ -292,6 +295,7 @@ describe("winning and UNO", () => {
     give(game, "P1", playable, number("blue", 4));
     game.playCard("P1", playable.id);
     expect(game.getPlayer("P1").unoDeclared).toBe(false);
+    game.getPlayer("P1").unoVulnerableAt = 0;
     game.accuseUno("P2", "P1");
     expect(game.getPlayer("P1").hand).toHaveLength(3);
     expect(game.getPlayer("P1").unoDeclared).toBe(false);

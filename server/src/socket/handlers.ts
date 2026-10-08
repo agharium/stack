@@ -152,9 +152,24 @@ export function registerSocketHandlers(
       })();
     });
 
+    const scheduleUnoAccuseReveal = (room: Room): void => {
+      if (room.unoAccuseRevealTimer) {
+        clearTimeout(room.unoAccuseRevealTimer);
+        room.unoAccuseRevealTimer = null;
+      }
+      const delay = room.game.msUntilUnoAccuseReveal();
+      if (delay == null) return;
+      room.unoAccuseRevealTimer = setTimeout(() => {
+        room.unoAccuseRevealTimer = null;
+        if (!manager.rooms.has(room.code)) return;
+        emitState(room);
+      }, delay);
+    };
+
     const afterGameAction = (room: Room): void => {
       emitState(room);
       maybePersistMatch(room);
+      scheduleUnoAccuseReveal(room);
     };
 
     socket.on("start-game", (payload, ack) => {
